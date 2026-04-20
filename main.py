@@ -3,7 +3,7 @@ import yt_dlp
 import os
 
 def main(page: ft.Page):
-    page.title = "Video Downloader"
+    page.title = "DL TOOL"
     page.theme_mode = ft.ThemeMode.DARK
 
     url_input = ft.TextField(label="Введите ссылку", expand=True)
