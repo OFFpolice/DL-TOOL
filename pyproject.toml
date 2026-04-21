@@ -34,4 +34,4 @@ module = "main.py"
 
 [tool.flet.android.app.startup_screen]
 show = true
-message = "Запускаю приложения. Пожалуйста, подождите..."
+message = "Start app..."
