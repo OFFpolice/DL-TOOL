@@ -1,6 +1,6 @@
 [project]
-name = "dl_tool"
-version = "0.0.1"
+name = "DL-TOOL"
+version = "0.0.0.1"
 description = "Universal video download. Yt-dip"
 dependencies = [
     "flet>=0.84.0",
@@ -9,8 +9,8 @@ dependencies = [
 
 [tool.flet]
 org = "com.offpolice"
-project = "DL_TOOL"
-product = "dl_tool"
+project = "DL-TOOL"
+product = "DL-TOOL"
 
 [tool.flet.android]
 min_sdk_version = 24
