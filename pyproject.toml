@@ -31,3 +31,7 @@ adaptive_icon_foreground = "assets/icon.png"
 
 [tool.flet.app]
 module = "main.py"
+
+[tool.flet.android.app.startup_screen]
+show = true
+message = "Starting up the app…"
