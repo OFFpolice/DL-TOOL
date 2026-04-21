@@ -6,7 +6,7 @@ import os
 DOWNLOAD_PATH = "/storage/emulated/0/Download"
 
 def main(page: ft.Page):
-    page.title = "DL TOOL"
+    page.title = "DL-TOOL"
     page.bgcolor = "#0b0f1a"
     page.theme_mode = ft.ThemeMode.DARK
     page.padding = 20
@@ -152,8 +152,8 @@ def main(page: ft.Page):
 
     header = ft.Row([
         ft.Row([
-            ft.Text("DL ", size=28, weight="bold", color="#3b82f6"),
-            ft.Text("TOOL", size=28, weight="bold"),
+            ft.Text("DL", size=28, weight="bold", color="#3b82f6"),
+            ft.Text("-TOOL", size=28, weight="bold"),
         ]),
         ft.IconButton(icon=ft.Icons.SETTINGS)
     ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
