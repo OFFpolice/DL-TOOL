@@ -21,11 +21,11 @@ adaptive_icon_foreground = "assets/icon.png"
 [tool.flet.android.permission]
 "android.permission.INTERNET" = true
 
-# (Android 13+)
+# Android 13+
 "android.permission.READ_MEDIA_VIDEO" = true
 "android.permission.READ_MEDIA_AUDIO" = true
 
-# (Android 11)
+# Для совместимости (до Android 12)
 "android.permission.READ_EXTERNAL_STORAGE" = true
 "android.permission.WRITE_EXTERNAL_STORAGE" = true
 
