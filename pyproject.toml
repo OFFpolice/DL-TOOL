@@ -7,6 +7,9 @@ dependencies = [
     "yt-dlp>=2026.3.17"
 ]
 
+[tool.flet.app]
+path = "."
+
 [tool.flet]
 org = "com.offpolice"
 project = "DL-TOOL"
