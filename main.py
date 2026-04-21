@@ -9,7 +9,7 @@ def main(page: ft.Page):
     page.title = "DL-TOOL"
     page.bgcolor = "#0b0f1a"
     page.theme_mode = ft.ThemeMode.DARK
-    page.padding = 20
+    page.padding = 0
     page.scroll = ft.ScrollMode.AUTO
 
     status_text = ft.Text("Готов к скачиванию", size=16, weight="bold")
@@ -158,15 +158,20 @@ def main(page: ft.Page):
         ft.IconButton(icon=ft.Icons.SETTINGS)
     ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
 
-    page.add(
-        header,
-        input_card,
-        ft.Text("Статус", size=16, weight="bold"),
-        status_card,
-        downloads_block
+    content = ft.SafeArea(
+        content=ft.Container(
+            content=ft.Column([
+                header,
+                input_card,
+                ft.Text("Статус", size=16, weight="bold"),
+                status_card,
+                downloads_block
+            ], spacing=15),
+            padding=20
+        )
     )
 
+    page.add(content)
     page.navigation_bar = nav
 
 ft.run(main, assets_dir="assets")
-
