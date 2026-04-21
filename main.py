@@ -153,7 +153,7 @@ def main(page: ft.Page):
     header = ft.Row([
         ft.Row([
             ft.Text("DL", size=28, weight="bold", color="#3b82f6"),
-            ft.Text("-TOOL", size=28, weight="bold"),
+            ft.Text("TOOL", size=28, weight="bold"),
         ]),
         ft.IconButton(icon=ft.Icons.SETTINGS)
     ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
