@@ -12,7 +12,6 @@ def main(page: ft.Page):
     page.padding = 20
     page.scroll = ft.ScrollMode.AUTO
 
-    # STATE
     status_text = ft.Text("Готов к скачиванию", size=16, weight="bold")
     status_sub = ft.Text("Вставьте ссылку и нажмите «Скачать»", size=12, color="#8a8f9c")
 
@@ -33,6 +32,13 @@ def main(page: ft.Page):
         status_sub.value = sub
         page.update()
 
+    def refresh_downloads():
+        if downloads_column.controls:
+            downloads_container.content = downloads_column
+        else:
+            downloads_container.content = empty_block
+        page.update()
+
     def add_download_item(text):
         downloads_column.controls.insert(
             0,
@@ -43,7 +49,7 @@ def main(page: ft.Page):
                 border_radius=10
             )
         )
-        page.update()
+        refresh_downloads()
 
     def download():
         url = url_input.value.strip()
@@ -72,29 +78,20 @@ def main(page: ft.Page):
 
         threading.Thread(target=run).start()
 
-    # BUTTONS
     paste_btn = ft.ElevatedButton(
         "Вставить",
         icon=ft.Icons.CONTENT_PASTE,
-        style=ft.ButtonStyle(
-            bgcolor="#1f2937",
-            color="white"
-        ),
-        on_click=lambda e: None
+        style=ft.ButtonStyle(bgcolor="#1f2937", color="white"),
+        on_click=lambda e: page.set_clipboard("") or setattr(url_input, "value", page.get_clipboard()) or page.update()
     )
 
     download_btn = ft.ElevatedButton(
         "Скачать",
         icon=ft.Icons.DOWNLOAD,
-        style=ft.ButtonStyle(
-            bgcolor="#2563eb",
-            color="white",
-            padding=20
-        ),
+        style=ft.ButtonStyle(bgcolor="#2563eb", color="white", padding=20),
         on_click=lambda e: download()
     )
 
-    # UI BLOCK: INPUT
     input_card = ft.Container(
         content=ft.Column([
             url_input,
@@ -106,7 +103,6 @@ def main(page: ft.Page):
         border=ft.border.all(1, "#1f2937")
     )
 
-    # STATUS BLOCK
     status_card = ft.Container(
         content=ft.Row([
             ft.Icon(ft.Icons.INFO_OUTLINE, color="#3b82f6"),
@@ -117,47 +113,48 @@ def main(page: ft.Page):
         bgcolor="#0f172a"
     )
 
-    # DOWNLOADS BLOCK
+    empty_block = ft.Column(
+        [
+            ft.Icon(ft.Icons.FOLDER, size=50, color="#3b82f6"),
+            ft.Text("Здесь пока пусто"),
+            ft.Text("Ваши скачанные видео появятся здесь", size=12, color="#8a8f9c")
+        ],
+        alignment=ft.MainAxisAlignment.CENTER,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER
+    )
+
+    downloads_container = ft.Container(
+        content=empty_block,
+        padding=20,
+        alignment=ft.Alignment(0, 0)
+    )
+
     downloads_block = ft.Container(
         content=ft.Column([
             ft.Row([
                 ft.Text("Последние загрузки", size=16, weight="bold"),
                 ft.TextButton("Открыть папку")
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-            ft.Container(
-                content=downloads_column if downloads_column.controls else ft.Column([
-                    ft.Icon(ft.Icons.FOLDER, size=50, color="#3b82f6"),
-                    ft.Text("Здесь пока пусто"),
-                    ft.Text("Ваши скачанные видео появятся здесь", size=12, color="#8a8f9c")
-                ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                padding=20,
-                alignment=ft.alignment.center
-            )
+            downloads_container
         ]),
         padding=15,
         border_radius=20,
         bgcolor="#0f172a"
     )
 
-    # NAVIGATION BAR
     nav = ft.NavigationBar(
         destinations=[
-            ft.NavigationBarDestination(
-                icon=ft.Icons.DOWNLOAD,
-                label="Скачать"
-            ),
-            ft.NavigationBarDestination(
-                icon=ft.Icons.HISTORY,
-                label="История"
-            ),
+            ft.NavigationBarDestination(icon=ft.Icons.DOWNLOAD, label="Скачать"),
+            ft.NavigationBarDestination(icon=ft.Icons.HISTORY, label="История"),
         ],
         bgcolor="#0f172a"
     )
 
-    # HEADER
     header = ft.Row([
-        ft.Text("DL ", size=28, weight="bold", color="#3b82f6"),
-        ft.Text("TOOL", size=28, weight="bold"),
+        ft.Row([
+            ft.Text("DL ", size=28, weight="bold", color="#3b82f6"),
+            ft.Text("TOOL", size=28, weight="bold"),
+        ]),
         ft.IconButton(icon=ft.Icons.SETTINGS)
     ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
 
@@ -170,7 +167,6 @@ def main(page: ft.Page):
     )
 
     page.navigation_bar = nav
-
 
 ft.run(main, assets_dir="assets")
 
