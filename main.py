@@ -2,19 +2,30 @@ import flet as ft
 import yt_dlp
 import os
 
+
 def main(page: ft.Page):
     page.title = "DL TOOL"
     page.theme_mode = ft.ThemeMode.DARK
 
     url_input = ft.TextField(label="Введите ссылку", expand=True)
     status_text = ft.Text("")
-    
-    video_player = ft.Video(
-        expand=True,
-        autoplay=False,
-    )
 
     downloads_path = ft.StoragePaths.get_downloads_directory()
+
+    def request_permissions():
+        perms = [
+            ft.PermissionType.STORAGE,
+            ft.PermissionType.MEDIA_LIBRARY,
+        ]
+
+        result = page.request_permissions(perms)
+
+        if not all(result.values()):
+            status_text.value = "Нет разрешений на память"
+            page.update()
+            return False
+
+        return True
 
     def download_video(e):
         url = url_input.value.strip()
@@ -22,6 +33,10 @@ def main(page: ft.Page):
         if not url:
             status_text.value = "Введите ссылку"
             page.update()
+            return
+
+        # Запрос разрешений
+        if not request_permissions():
             return
 
         try:
@@ -40,9 +55,6 @@ def main(page: ft.Page):
 
             status_text.value = f"Скачано:\n{filename}"
 
-            video_player.src = filename
-            video_player.play()
-
         except Exception as ex:
             status_text.value = f"Ошибка: {ex}"
 
@@ -54,11 +66,10 @@ def main(page: ft.Page):
                 url_input,
                 ft.ElevatedButton("Скачать", on_click=download_video),
                 status_text,
-                video_player,
             ],
             expand=True,
         )
     )
 
 
-ft.app(target=main, assets_dir="assets")
+ft.run(main, assets_dir="assets")
