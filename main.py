@@ -18,30 +18,12 @@ def main(page: ft.Page):
 
     page.on_mount = init_paths
 
-    def request_permissions():
-        perms = [
-            ft.PermissionType.STORAGE,
-            ft.PermissionType.MEDIA_LIBRARY,
-        ]
-
-        result = page.request_permissions(perms)
-
-        if not all(result.values()):
-            status_text.value = "Нет разрешений на память"
-            page.update()
-            return False
-
-        return True
-
     def download_video(e):
         url = url_input.value.strip()
 
         if not url:
             status_text.value = "Введите ссылку"
             page.update()
-            return
-
-        if not request_permissions():
             return
 
         try:
