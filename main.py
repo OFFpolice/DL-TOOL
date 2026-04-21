@@ -10,7 +10,13 @@ def main(page: ft.Page):
     url_input = ft.TextField(label="Введите ссылку", expand=True)
     status_text = ft.Text("")
 
-    downloads_path = ft.StoragePaths.get_downloads_directory()
+    downloads_path = None
+
+    def init_paths(e):
+        nonlocal downloads_path
+        downloads_path = page.storage_paths.get_downloads_directory()
+
+    page.on_mount = init_paths
 
     def request_permissions():
         perms = [
@@ -35,7 +41,6 @@ def main(page: ft.Page):
             page.update()
             return
 
-        # Запрос разрешений
         if not request_permissions():
             return
 
