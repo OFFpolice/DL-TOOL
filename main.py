@@ -3,14 +3,36 @@ import yt_dlp
 import threading
 import os
 
-DOWNLOAD_PATH = "/storage/emulated/0/Download"
+DEFAULT_PATH = "/storage/emulated/0/Download"
 
 def main(page: ft.Page):
     page.title = "DL-TOOL"
-    page.bgcolor = "#0b0f1a"
-    page.theme_mode = ft.ThemeMode.DARK
     page.padding = 0
     page.scroll = ft.ScrollMode.AUTO
+
+    download_path = DEFAULT_PATH
+    current_theme = "custom"
+
+    def apply_theme(mode):
+        nonlocal current_theme
+        current_theme = mode
+
+        if mode == "dark":
+            page.theme_mode = ft.ThemeMode.DARK
+            page.bgcolor = None
+        elif mode == "light":
+            page.theme_mode = ft.ThemeMode.LIGHT
+            page.bgcolor = None
+        elif mode == "system":
+            page.theme_mode = ft.ThemeMode.SYSTEM
+            page.bgcolor = None
+        else:
+            page.theme_mode = ft.ThemeMode.DARK
+            page.bgcolor = "#0b0f1a"
+
+        page.update()
+
+    apply_theme("custom")
 
     status_text = ft.Text("Готов к скачиванию", size=16, weight="bold")
     status_sub = ft.Text("Вставьте ссылку и нажмите «Скачать»", size=12, color="#8a8f9c")
@@ -18,11 +40,7 @@ def main(page: ft.Page):
     url_input = ft.TextField(
         hint_text="Введите ссылку",
         expand=True,
-        bgcolor="#111827",
         border_radius=12,
-        border_color="#1f2937",
-        color="white",
-        cursor_color="#3b82f6"
     )
 
     downloads_column = ft.Column()
@@ -33,10 +51,7 @@ def main(page: ft.Page):
         page.update()
 
     def refresh_downloads():
-        if downloads_column.controls:
-            downloads_container.content = downloads_column
-        else:
-            downloads_container.content = empty_block
+        downloads_container.content = downloads_column if downloads_column.controls else empty_block
         page.update()
 
     def add_download_item(text):
@@ -45,7 +60,6 @@ def main(page: ft.Page):
             ft.Container(
                 content=ft.Text(text, size=12),
                 padding=10,
-                bgcolor="#111827",
                 border_radius=10
             )
         )
@@ -62,7 +76,7 @@ def main(page: ft.Page):
         def run():
             try:
                 ydl_opts = {
-                    "outtmpl": os.path.join(DOWNLOAD_PATH, "%(title)s.%(ext)s"),
+                    "outtmpl": os.path.join(download_path, "%(title)s.%(ext)s"),
                     "noplaylist": True,
                 }
 
@@ -78,19 +92,77 @@ def main(page: ft.Page):
 
         threading.Thread(target=run).start()
 
+    async def paste_click(e):
+        try:
+            clip = await page.get_clipboard()
+            if clip:
+                url_input.value = clip
+                page.update()
+        except:
+            pass
+
     paste_btn = ft.ElevatedButton(
         "Вставить",
         icon=ft.Icons.CONTENT_PASTE,
-        style=ft.ButtonStyle(bgcolor="#1f2937", color="white"),
-        on_click=lambda e: page.set_clipboard("") or setattr(url_input, "value", page.get_clipboard()) or page.update()
+        on_click=paste_click
     )
 
     download_btn = ft.ElevatedButton(
         "Скачать",
         icon=ft.Icons.DOWNLOAD,
-        style=ft.ButtonStyle(bgcolor="#2563eb", color="white", padding=20),
         on_click=lambda e: download()
     )
+
+    def pick_folder_result(e: ft.FilePickerResultEvent):
+        nonlocal download_path
+        if e.path:
+            download_path = e.path
+            folder_text.value = f"Папка: {download_path}"
+            page.update()
+
+    file_picker = ft.FilePicker(on_result=pick_folder_result)
+    page.overlay.append(file_picker)
+
+    def open_settings(e):
+        dialog.open = True
+        page.update()
+
+    def set_theme(e):
+        apply_theme(e.control.value)
+
+    folder_text = ft.Text(f"Папка: {download_path}", size=12)
+
+    dialog = ft.AlertDialog(
+        title=ft.Text("Настройки"),
+        content=ft.Column(
+            [
+                ft.Text("Тема"),
+                ft.Dropdown(
+                    value="custom",
+                    options=[
+                        ft.dropdown.Option("custom", "Стандартная"),
+                        ft.dropdown.Option("dark", "Темная"),
+                        ft.dropdown.Option("light", "Светлая"),
+                        ft.dropdown.Option("system", "Система"),
+                    ],
+                    on_change=set_theme
+                ),
+                ft.Divider(),
+                ft.Text("Папка загрузки"),
+                folder_text,
+                ft.ElevatedButton(
+                    "Выбрать папку",
+                    on_click=lambda e: file_picker.get_directory_path()
+                ),
+            ],
+            tight=True
+        ),
+        actions=[
+            ft.TextButton("Закрыть", on_click=lambda e: setattr(dialog, "open", False) or page.update())
+        ]
+    )
+
+    page.dialog = dialog
 
     input_card = ft.Container(
         content=ft.Column([
@@ -99,25 +171,22 @@ def main(page: ft.Page):
         ], spacing=15),
         padding=20,
         border_radius=20,
-        bgcolor="#0f172a",
-        border=ft.border.all(1, "#1f2937")
     )
 
     status_card = ft.Container(
         content=ft.Row([
-            ft.Icon(ft.Icons.INFO_OUTLINE, color="#3b82f6"),
+            ft.Icon(ft.Icons.INFO_OUTLINE),
             ft.Column([status_text, status_sub])
         ]),
         padding=15,
         border_radius=15,
-        bgcolor="#0f172a"
     )
 
     empty_block = ft.Column(
         [
-            ft.Icon(ft.Icons.FOLDER, size=50, color="#3b82f6"),
+            ft.Icon(ft.Icons.FOLDER, size=50),
             ft.Text("Здесь пока пусто"),
-            ft.Text("Ваши скачанные видео появятся здесь", size=12, color="#8a8f9c")
+            ft.Text("Ваши скачанные видео появятся здесь", size=12)
         ],
         alignment=ft.MainAxisAlignment.CENTER,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER
@@ -131,31 +200,26 @@ def main(page: ft.Page):
 
     downloads_block = ft.Container(
         content=ft.Column([
-            ft.Row([
-                ft.Text("Последние загрузки", size=16, weight="bold"),
-                ft.TextButton("Открыть папку")
-            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            ft.Text("Последние загрузки", size=16, weight="bold"),
             downloads_container
         ]),
         padding=15,
         border_radius=20,
-        bgcolor="#0f172a"
     )
 
     nav = ft.NavigationBar(
         destinations=[
             ft.NavigationBarDestination(icon=ft.Icons.DOWNLOAD, label="Скачать"),
             ft.NavigationBarDestination(icon=ft.Icons.HISTORY, label="История"),
-        ],
-        bgcolor="#0f172a"
+        ]
     )
 
     header = ft.Row([
         ft.Row([
-            ft.Text("DL", size=28, weight="bold", color="#3b82f6"),
+            ft.Text("DL", size=28, weight="bold"),
             ft.Text("TOOL", size=28, weight="bold"),
         ]),
-        ft.IconButton(icon=ft.Icons.SETTINGS)
+        ft.IconButton(icon=ft.Icons.SETTINGS, on_click=open_settings)
     ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
 
     content = ft.SafeArea(
