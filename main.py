@@ -7,12 +7,15 @@ import flet_permission_handler as fph
 
 DOWNLOAD_PATH = "/storage/emulated/0/Download"
 
+
 def main(page: ft.Page):
     page.title = "DL-TOOL"
     page.bgcolor = "#0b0f1a"
     page.theme_mode = ft.ThemeMode.DARK
     page.padding = 0
     page.scroll = ft.ScrollMode.AUTO
+
+    ph = fph.PermissionHandler()
 
     status_text = ft.Text("Готов к скачиванию", size=16, weight="bold")
     status_sub = ft.Text("Вставьте ссылку и нажмите «Скачать»", size=12, color="#8a8f9c")
@@ -28,6 +31,9 @@ def main(page: ft.Page):
     )
 
     downloads_column = ft.Column()
+
+    def show_snackbar(message: str):
+        page.open(ft.SnackBar(ft.Text(message)))
 
     def update_status(main, sub):
         status_text.value = main
@@ -53,38 +59,72 @@ def main(page: ft.Page):
         )
         refresh_downloads()
 
+    async def check_permissions():
+        permissions = [
+            fph.Permission.STORAGE,
+            fph.Permission.VIDEO,
+            fph.Permission.INTERNET,
+        ]
+
+        results = []
+
+        for perm in permissions:
+            status = await ph.get_status(perm)
+
+            if status != fph.PermissionStatus.GRANTED:
+                status = await ph.request(perm)
+
+            results.append(status == fph.PermissionStatus.GRANTED)
+
+        if not all(results):
+            show_snackbar("Нет всех разрешений. Открой настройки.")
+            await ph.open_app_settings()
+            return False
+
+        return True
+
     def download():
         url = url_input.value.strip()
         if not url:
             update_status("Ошибка", "Введите ссылку")
             return
 
-        update_status("Загрузка...", "Подождите")
+        async def start():
+            ok = await check_permissions()
+            if not ok:
+                return
 
-        def run():
-            try:
-                ydl_opts = {
-                    "outtmpl": os.path.join(DOWNLOAD_PATH, "%(title)s.%(ext)s"),
-                    "noplaylist": True,
-                }
+            update_status("Загрузка...", "Подождите")
 
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(url, download=True)
-                    title = info.get("title", "video")
+            def run():
+                try:
+                    ydl_opts = {
+                        "outtmpl": os.path.join(DOWNLOAD_PATH, "%(title)s.%(ext)s"),
+                        "noplaylist": True,
+                    }
 
-                page.call_from_thread(lambda: update_status("Готово", "Видео скачано"))
-                page.call_from_thread(lambda: add_download_item(title))
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        info = ydl.extract_info(url, download=True)
+                        title = info.get("title", "video")
 
-            except Exception as e:
-                page.call_from_thread(lambda: update_status("Ошибка", str(e)))
+                    page.call_from_thread(lambda: update_status("Готово", "Видео скачано"))
+                    page.call_from_thread(lambda: add_download_item(title))
 
-        threading.Thread(target=run).start()
+                except Exception as e:
+                    page.call_from_thread(lambda: update_status("Ошибка", str(e)))
+
+            threading.Thread(target=run).start()
+
+        page.run_task(start)
 
     paste_btn = ft.ElevatedButton(
         "Вставить",
         icon=ft.Icons.CONTENT_PASTE,
         style=ft.ButtonStyle(bgcolor="#1f2937", color="white"),
-        on_click=lambda e: page.set_clipboard("") or setattr(url_input, "value", page.get_clipboard()) or page.update()
+        on_click=lambda e: (
+            setattr(url_input, "value", page.get_clipboard()),
+            page.update()
+        )
     )
 
     download_btn = ft.ElevatedButton(
@@ -175,5 +215,6 @@ def main(page: ft.Page):
 
     page.add(content)
     page.navigation_bar = nav
+
 
 ft.run(main, assets_dir="assets")
