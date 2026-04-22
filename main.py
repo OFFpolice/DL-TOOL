@@ -2,8 +2,6 @@ import flet as ft
 import yt_dlp
 import threading
 import os
-import re
-import subprocess
 
 DOWNLOAD_PATH = "/storage/emulated/0/Download"
 
@@ -17,8 +15,6 @@ def main(page: ft.Page):
     status_text = ft.Text("Готов к скачиванию", size=16, weight="bold")
     status_sub = ft.Text("Вставьте ссылку и нажмите «Скачать»", size=12, color="#8a8f9c")
 
-    progress_bar = ft.ProgressBar(value=0, width=400, color="#3b82f6")
-
     url_input = ft.TextField(
         hint_text="Введите ссылку",
         expand=True,
@@ -29,49 +25,31 @@ def main(page: ft.Page):
         cursor_color="#3b82f6"
     )
 
-    downloads_column = ft.Column(spacing=10)
+    downloads_column = ft.Column()
 
     def update_status(main, sub):
         status_text.value = main
         status_sub.value = sub
         page.update()
 
-    def update_progress(value):
-        progress_bar.value = value
-        page.update()
-
     def refresh_downloads():
-        downloads_container.content = downloads_column if downloads_column.controls else empty_block
+        if downloads_column.controls:
+            downloads_container.content = downloads_column
+        else:
+            downloads_container.content = empty_block
         page.update()
 
-    def sanitize_filename(name):
-        return re.sub(r'[\\/*?:"<>|]', "_", name)
-
-    def add_download_item(title, filepath):
-        item = ft.Container(
-            content=ft.Column([
-                ft.Text(title, size=12, weight="bold"),
-                ft.Text(filepath, size=10, color="#8a8f9c")
-            ]),
-            padding=10,
-            bgcolor="#111827",
-            border_radius=10,
-            on_click=lambda e: open_file(filepath)
+    def add_download_item(text):
+        downloads_column.controls.insert(
+            0,
+            ft.Container(
+                content=ft.Text(text, size=12),
+                padding=10,
+                bgcolor="#111827",
+                border_radius=10
+            )
         )
-        downloads_column.controls.insert(0, item)
         refresh_downloads()
-
-    def open_file(path):
-        try:
-            subprocess.Popen(["xdg-open", path])
-        except:
-            pass
-
-    def open_folder(e):
-        try:
-            subprocess.Popen(["xdg-open", DOWNLOAD_PATH])
-        except:
-            pass
 
     def download():
         url = url_input.value.strip()
@@ -79,49 +57,32 @@ def main(page: ft.Page):
             update_status("Ошибка", "Введите ссылку")
             return
 
-        update_status("Загрузка...", "Подготовка")
-        update_progress(0)
-
-        def progress_hook(d):
-            if d["status"] == "downloading":
-                total = d.get("total_bytes") or d.get("total_bytes_estimate") or 1
-                downloaded = d.get("downloaded_bytes", 0)
-                percent = downloaded / total
-                page.call_from_thread(lambda: update_progress(percent))
-            elif d["status"] == "finished":
-                page.call_from_thread(lambda: update_progress(1))
+        update_status("Загрузка...", "Подождите")
 
         def run():
             try:
                 ydl_opts = {
                     "outtmpl": os.path.join(DOWNLOAD_PATH, "%(title)s.%(ext)s"),
                     "noplaylist": True,
-                    "progress_hooks": [progress_hook],
-                    "quiet": True
                 }
 
                 with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                     info = ydl.extract_info(url, download=True)
-                    title = sanitize_filename(info.get("title", "video"))
-                    ext = info.get("ext", "mp4")
-                    filepath = os.path.join(DOWNLOAD_PATH, f"{title}.{ext}")
+                    title = info.get("title", "video")
 
                 page.call_from_thread(lambda: update_status("Готово", "Видео скачано"))
-                page.call_from_thread(lambda: add_download_item(title, filepath))
+                page.call_from_thread(lambda: add_download_item(title))
 
             except Exception as e:
                 page.call_from_thread(lambda: update_status("Ошибка", str(e)))
 
-        threading.Thread(target=run, daemon=True).start()
+        threading.Thread(target=run).start()
 
     paste_btn = ft.ElevatedButton(
         "Вставить",
         icon=ft.Icons.CONTENT_PASTE,
         style=ft.ButtonStyle(bgcolor="#1f2937", color="white"),
-        on_click=lambda e: (
-            setattr(url_input, "value", page.get_clipboard()),
-            page.update()
-        )
+        on_click=lambda e: page.set_clipboard("") or setattr(url_input, "value", page.get_clipboard()) or page.update()
     )
 
     download_btn = ft.ElevatedButton(
@@ -143,13 +104,10 @@ def main(page: ft.Page):
     )
 
     status_card = ft.Container(
-        content=ft.Column([
-            ft.Row([
-                ft.Icon(ft.Icons.INFO_OUTLINE, color="#3b82f6"),
-                ft.Column([status_text, status_sub])
-            ]),
-            progress_bar
-        ], spacing=10),
+        content=ft.Row([
+            ft.Icon(ft.Icons.INFO_OUTLINE, color="#3b82f6"),
+            ft.Column([status_text, status_sub])
+        ]),
         padding=15,
         border_radius=15,
         bgcolor="#0f172a"
@@ -168,19 +126,27 @@ def main(page: ft.Page):
     downloads_container = ft.Container(
         content=empty_block,
         padding=20,
-        alignment=ft.alignment.center
+        alignment=ft.Alignment(0, 0)
     )
 
     downloads_block = ft.Container(
         content=ft.Column([
             ft.Row([
                 ft.Text("Последние загрузки", size=16, weight="bold"),
-                ft.TextButton("Открыть папку", on_click=open_folder)
+                ft.TextButton("Открыть папку")
             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             downloads_container
         ]),
         padding=15,
         border_radius=20,
+        bgcolor="#0f172a"
+    )
+
+    nav = ft.NavigationBar(
+        destinations=[
+            ft.NavigationBarDestination(icon=ft.Icons.DOWNLOAD, label="Скачать"),
+            ft.NavigationBarDestination(icon=ft.Icons.HISTORY, label="История"),
+        ],
         bgcolor="#0f172a"
     )
 
@@ -192,44 +158,20 @@ def main(page: ft.Page):
         ft.IconButton(icon=ft.Icons.SETTINGS)
     ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
 
-    main_view = ft.Column([
-        header,
-        input_card,
-        ft.Text("Статус", size=16, weight="bold"),
-        status_card,
-        downloads_block
-    ], spacing=15)
-
-    history_view = ft.Column([
-        ft.Text("История загрузок", size=18, weight="bold"),
-        downloads_container
-    ])
-
-    content_container = ft.Container(padding=20)
-
-    def switch_tab(e):
-        if nav.selected_index == 0:
-            content_container.content = main_view
-        else:
-            content_container.content = history_view
-        page.update()
-
-    nav = ft.NavigationBar(
-        selected_index=0,
-        destinations=[
-            ft.NavigationBarDestination(icon=ft.Icons.DOWNLOAD, label="Скачать"),
-            ft.NavigationBarDestination(icon=ft.Icons.HISTORY, label="История"),
-        ],
-        bgcolor="#0f172a",
-        on_change=switch_tab
+    content = ft.SafeArea(
+        content=ft.Container(
+            content=ft.Column([
+                header,
+                input_card,
+                ft.Text("Статус", size=16, weight="bold"),
+                status_card,
+                downloads_block
+            ], spacing=15),
+            padding=20
+        )
     )
-
-    content = ft.SafeArea(content=content_container)
 
     page.add(content)
     page.navigation_bar = nav
-
-    content_container.content = main_view
-    page.update()
 
 ft.run(main, assets_dir="assets")
