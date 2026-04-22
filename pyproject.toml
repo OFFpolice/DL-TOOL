@@ -4,6 +4,7 @@ version = "0.0.0.1"
 description = "Universal video download. Yt-dip"
 dependencies = [
     "flet>=0.84.0",
+    "flet-permission-handler>=0.84.0",
     "yt-dlp>=2026.3.17"
 ]
 
