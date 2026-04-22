@@ -41,7 +41,7 @@ jobs:
         run: yes | flutter doctor --android-licenses || true
 
       - name: Build APK
-        run: flet build apk --no-rich-output
+        run: flet build apk --split-per-abi --no-rich-output
         env:
           CI: true
 
