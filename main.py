@@ -35,7 +35,7 @@ def main(page: ft.Page):
     apply_theme("custom")
 
     status_text = ft.Text("Готов к скачиванию", size=16, weight="bold")
-    status_sub = ft.Text("Вставьте ссылку и нажмите «Скачать»", size=12, color="#8a8f9c")
+    status_sub = ft.Text("Вставьте ссылку и нажмите «Скачать»", size=12)
 
     url_input = ft.TextField(
         hint_text="Введите ссылку",
@@ -113,7 +113,7 @@ def main(page: ft.Page):
         on_click=lambda e: download()
     )
 
-    def pick_folder_result(e: ft.FilePickerResultEvent):
+    def pick_folder_result(e):
         nonlocal download_path
         if e.path:
             download_path = e.path
