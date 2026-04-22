@@ -5,6 +5,7 @@ import threading
 import flet as ft
 import flet_permission_handler as fph
 
+
 DOWNLOAD_PATH = "/storage/emulated/0/Download"
 
 
@@ -40,6 +41,11 @@ def main(page: ft.Page):
         status_sub.value = sub
         page.update()
 
+    def set_loading(state: bool):
+        download_btn.disabled = state
+        paste_btn.disabled = state
+        page.update()
+
     def refresh_downloads():
         if downloads_column.controls:
             downloads_container.content = downloads_column
@@ -60,27 +66,13 @@ def main(page: ft.Page):
         refresh_downloads()
 
     async def check_permissions():
-        permissions = [
-            fph.Permission.STORAGE,
-            fph.Permission.VIDEO,
-            fph.Permission.INTERNET,
-        ]
-
-        results = []
-
-        for perm in permissions:
-            status = await ph.get_status(perm)
-
-            if status != fph.PermissionStatus.GRANTED:
-                status = await ph.request(perm)
-
-            results.append(status == fph.PermissionStatus.GRANTED)
-
-        if not all(results):
-            show_snackbar("Нет всех разрешений. Открой настройки.")
+        status = await ph.get_status(fph.Permission.STORAGE)
+        if status != fph.PermissionStatus.GRANTED:
+            status = await ph.request(fph.Permission.STORAGE)
+        if status != fph.PermissionStatus.GRANTED:
+            show_snackbar("Нет доступа к памяти")
             await ph.open_app_settings()
             return False
-
         return True
 
     def download():
@@ -95,6 +87,7 @@ def main(page: ft.Page):
                 return
 
             update_status("Загрузка...", "Подождите")
+            set_loading(True)
 
             def run():
                 try:
@@ -109,22 +102,33 @@ def main(page: ft.Page):
 
                     page.call_from_thread(lambda: update_status("Готово", "Видео скачано"))
                     page.call_from_thread(lambda: add_download_item(title))
-
+                except yt_dlp.utils.DownloadError as e:
+                    page.call_from_thread(lambda: update_status("Ошибка загрузки", str(e)))
                 except Exception as e:
                     page.call_from_thread(lambda: update_status("Ошибка", str(e)))
+                finally:
+                    page.call_from_thread(lambda: set_loading(False))
 
             threading.Thread(target=run).start()
 
         page.run_task(start)
 
+    async def paste_clipboard(e):
+        try:
+            text = await page.clipboard.get()
+            if text:
+                url_input.value = text
+                page.update()
+            else:
+                show_snackbar("Буфер обмена пуст")
+        except Exception:
+            show_snackbar("Ошибка доступа к буферу")
+
     paste_btn = ft.ElevatedButton(
         "Вставить",
         icon=ft.Icons.CONTENT_PASTE,
         style=ft.ButtonStyle(bgcolor="#1f2937", color="white"),
-        on_click=lambda e: (
-            setattr(url_input, "value", page.get_clipboard()),
-            page.update()
-        )
+        on_click=paste_clipboard
     )
 
     download_btn = ft.ElevatedButton(
