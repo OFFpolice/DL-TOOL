@@ -37,11 +37,7 @@ def main(page: ft.Page):
     status_text = ft.Text("Готов к скачиванию", size=16, weight="bold")
     status_sub = ft.Text("Вставьте ссылку и нажмите «Скачать»", size=12)
 
-    url_input = ft.TextField(
-        hint_text="Введите ссылку",
-        expand=True,
-        border_radius=12,
-    )
+    url_input = ft.TextField(hint_text="Введите ссылку", expand=True)
 
     downloads_column = ft.Column()
 
@@ -101,17 +97,8 @@ def main(page: ft.Page):
         except:
             pass
 
-    paste_btn = ft.ElevatedButton(
-        "Вставить",
-        icon=ft.Icons.CONTENT_PASTE,
-        on_click=paste_click
-    )
-
-    download_btn = ft.ElevatedButton(
-        "Скачать",
-        icon=ft.Icons.DOWNLOAD,
-        on_click=lambda e: download()
-    )
+    paste_btn = ft.ElevatedButton("Вставить", on_click=paste_click)
+    download_btn = ft.ElevatedButton("Скачать", on_click=lambda e: download())
 
     def pick_folder_result(e):
         nonlocal download_path
@@ -120,7 +107,8 @@ def main(page: ft.Page):
             folder_text.value = f"Папка: {download_path}"
             page.update()
 
-    file_picker = ft.FilePicker(on_result=pick_folder_result)
+    file_picker = ft.FilePicker()
+    file_picker.on_result = pick_folder_result
     page.overlay.append(file_picker)
 
     def open_settings(e):
@@ -136,7 +124,6 @@ def main(page: ft.Page):
         title=ft.Text("Настройки"),
         content=ft.Column(
             [
-                ft.Text("Тема"),
                 ft.Dropdown(
                     value="custom",
                     options=[
@@ -147,15 +134,12 @@ def main(page: ft.Page):
                     ],
                     on_change=set_theme
                 ),
-                ft.Divider(),
-                ft.Text("Папка загрузки"),
                 folder_text,
                 ft.ElevatedButton(
                     "Выбрать папку",
                     on_click=lambda e: file_picker.get_directory_path()
                 ),
-            ],
-            tight=True
+            ]
         ),
         actions=[
             ft.TextButton("Закрыть", on_click=lambda e: setattr(dialog, "open", False) or page.update())
@@ -167,44 +151,29 @@ def main(page: ft.Page):
     input_card = ft.Container(
         content=ft.Column([
             url_input,
-            ft.Row([paste_btn, download_btn], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
-        ], spacing=15),
-        padding=20,
-        border_radius=20,
+            ft.Row([paste_btn, download_btn])
+        ])
     )
 
     status_card = ft.Container(
-        content=ft.Row([
-            ft.Icon(ft.Icons.INFO_OUTLINE),
-            ft.Column([status_text, status_sub])
-        ]),
-        padding=15,
-        border_radius=15,
+        content=ft.Column([status_text, status_sub])
     )
 
     empty_block = ft.Column(
         [
-            ft.Icon(ft.Icons.FOLDER, size=50),
             ft.Text("Здесь пока пусто"),
             ft.Text("Ваши скачанные видео появятся здесь", size=12)
         ],
-        alignment=ft.MainAxisAlignment.CENTER,
-        horizontal_alignment=ft.CrossAxisAlignment.CENTER
+        alignment=ft.MainAxisAlignment.CENTER
     )
 
-    downloads_container = ft.Container(
-        content=empty_block,
-        padding=20,
-        alignment=ft.Alignment(0, 0)
-    )
+    downloads_container = ft.Container(content=empty_block)
 
     downloads_block = ft.Container(
         content=ft.Column([
-            ft.Text("Последние загрузки", size=16, weight="bold"),
+            ft.Text("Последние загрузки"),
             downloads_container
-        ]),
-        padding=15,
-        border_radius=20,
+        ])
     )
 
     nav = ft.NavigationBar(
@@ -215,24 +184,17 @@ def main(page: ft.Page):
     )
 
     header = ft.Row([
-        ft.Row([
-            ft.Text("DL", size=28, weight="bold"),
-            ft.Text("TOOL", size=28, weight="bold"),
-        ]),
+        ft.Text("DL TOOL"),
         ft.IconButton(icon=ft.Icons.SETTINGS, on_click=open_settings)
     ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
 
     content = ft.SafeArea(
-        content=ft.Container(
-            content=ft.Column([
-                header,
-                input_card,
-                ft.Text("Статус", size=16, weight="bold"),
-                status_card,
-                downloads_block
-            ], spacing=15),
-            padding=20
-        )
+        content=ft.Column([
+            header,
+            input_card,
+            status_card,
+            downloads_block
+        ])
     )
 
     page.add(content)
