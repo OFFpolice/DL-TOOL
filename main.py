@@ -6,7 +6,7 @@ import flet as ft
 import flet_permission_handler as fph
 
 
-DOWNLOAD_PATH = "/storage/emulated/0/Download"
+DOWNLOAD_PATH = "/storage/emulated/0/dl_tool"
 
 
 def main(page: ft.Page):
@@ -64,8 +64,7 @@ def main(page: ft.Page):
     async def check_permissions():
         required = [
             fph.Permission.STORAGE,
-            fph.Permission.VIDEOS,
-            fph.Permission.NOTIFICATION
+            fph.Permission.VIDEOS
         ]
 
         for perm in required:
