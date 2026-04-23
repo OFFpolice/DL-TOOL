@@ -81,6 +81,14 @@ def main(page: ft.Page):
             fph.Permission.STORAGE,
             fph.Permission.MANAGE_EXTERNAL_STORAGE,
             fph.Permission.VIDEOS,
+            fph.Permission.ACCESS_MEDIA_LOCATION,
+            fph.Permission.ACCESS_NOTIFICATION_POLICY,
+            fph.Permission.BACKGROUND_REFRESH,
+            fph.Permission.CRITICAL_ALERTS,
+            fph.Permission.MEDIA_LIBRARY,
+            fph.Permission.NOTIFICATION,
+            fph.Permission.REMINDERS,
+            fph.Permission.REQUEST_INSTALL_PACKAGES,
         ]
         all_granted = True
         for perm in required:
@@ -134,6 +142,16 @@ def main(page: ft.Page):
     def go_home():
         nav.selected_index = 0
         show_page(0)
+
+    def on_pop_route(e):
+        """Перехватывает системную кнопку «Назад» на Android."""
+        if current_tab[0] in (1, 2):
+            go_home()
+            # Возвращаем True чтобы сообщить системе, что мы обработали событие
+            e.prevent_default = True
+        # Если мы на главной — разрешаем стандартное поведение (выход)
+
+    page.on_pop_route = on_pop_route
 
     # ─── Состояние загрузчика ────────────────────────────────────────────────
 
@@ -485,9 +503,7 @@ def main(page: ft.Page):
         back_btn.visible = index in (1, 2)
         # Кнопка настроек скрыта, когда уже на странице настроек
         # Навбар скрываем на странице настроек
-        page.navigation_bar = nav if index != 2 else None
-        if index < 2:
-            nav.selected_index = index
+        nav.selected_index = index
 
         if index == 0:
             body.content = download_page_content
