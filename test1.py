@@ -6,7 +6,7 @@ import flet as ft
 import flet_permission_handler as fph
 
 
-DOWNLOAD_PATH = "/storage/emulated/0/Download"
+DOWNLOAD_PATH = "/storage/emulated/0/dl_tool"
 
 
 def main(page: ft.Page):
@@ -27,8 +27,7 @@ def main(page: ft.Page):
         bgcolor="#111827",
         border_radius=12,
         border_color="#1f2937",
-        color="white",
-        cursor_color="#3b82f6"
+        color="white"
     )
 
     downloads_column = ft.Column()
@@ -47,10 +46,7 @@ def main(page: ft.Page):
         page.update()
 
     def refresh_downloads():
-        if downloads_column.controls:
-            downloads_container.content = downloads_column
-        else:
-            downloads_container.content = empty_block
+        downloads_container.content = downloads_column if downloads_column.controls else empty_block
         page.update()
 
     def add_download_item(text):
@@ -66,13 +62,25 @@ def main(page: ft.Page):
         refresh_downloads()
 
     async def check_permissions():
-        status = await ph.get_status(fph.Permission.STORAGE)
-        if status != fph.PermissionStatus.GRANTED:
-            status = await ph.request(fph.Permission.STORAGE)
-        if status != fph.PermissionStatus.GRANTED:
-            show_snackbar("Нет доступа к памяти")
-            await ph.open_app_settings()
-            return False
+        required = [
+            fph.Permission.STORAGE,
+            fph.Permission.VIDEOS
+        ]
+
+        for perm in required:
+            try:
+                status = await ph.get_status(perm)
+
+                if not status or status.name != "GRANTED":
+                    status = await ph.request(perm)
+
+                if not status or status.name != "GRANTED":
+                    show_snackbar(f"Нет разрешения: {perm.name}")
+                    await ph.open_app_settings()
+                    return False
+            except Exception:
+                continue
+
         return True
 
     def download():
@@ -102,10 +110,10 @@ def main(page: ft.Page):
 
                     page.call_from_thread(lambda: update_status("Готово", "Видео скачано"))
                     page.call_from_thread(lambda: add_download_item(title))
-                except yt_dlp.utils.DownloadError as e:
-                    page.call_from_thread(lambda: update_status("Ошибка загрузки", str(e)))
+
                 except Exception as e:
                     page.call_from_thread(lambda: update_status("Ошибка", str(e)))
+
                 finally:
                     page.call_from_thread(lambda: set_loading(False))
 
@@ -120,9 +128,9 @@ def main(page: ft.Page):
                 url_input.value = text
                 page.update()
             else:
-                show_snackbar("Буфер обмена пуст")
+                show_snackbar("Буфер пуст")
         except Exception:
-            show_snackbar("Ошибка доступа к буферу")
+            show_snackbar("Ошибка буфера")
 
     paste_btn = ft.ElevatedButton(
         "Вставить",
@@ -134,29 +142,8 @@ def main(page: ft.Page):
     download_btn = ft.ElevatedButton(
         "Скачать",
         icon=ft.Icons.DOWNLOAD,
-        style=ft.ButtonStyle(bgcolor="#2563eb", color="white", padding=20),
+        style=ft.ButtonStyle(bgcolor="#2563eb", color="white"),
         on_click=lambda e: download()
-    )
-
-    input_card = ft.Container(
-        content=ft.Column([
-            url_input,
-            ft.Row([paste_btn, download_btn], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
-        ], spacing=15),
-        padding=20,
-        border_radius=20,
-        bgcolor="#0f172a",
-        border=ft.border.all(1, "#1f2937")
-    )
-
-    status_card = ft.Container(
-        content=ft.Row([
-            ft.Icon(ft.Icons.INFO_OUTLINE, color="#3b82f6"),
-            ft.Column([status_text, status_sub])
-        ]),
-        padding=15,
-        border_radius=15,
-        bgcolor="#0f172a"
     )
 
     empty_block = ft.Column(
@@ -208,9 +195,26 @@ def main(page: ft.Page):
         content=ft.Container(
             content=ft.Column([
                 header,
-                input_card,
+                ft.Container(
+                    content=ft.Column([
+                        url_input,
+                        ft.Row([paste_btn, download_btn], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+                    ], spacing=15),
+                    padding=20,
+                    border_radius=20,
+                    bgcolor="#0f172a",
+                    border=ft.border.all(1, "#1f2937")
+                ),
                 ft.Text("Статус", size=16, weight="bold"),
-                status_card,
+                ft.Container(
+                    content=ft.Row([
+                        ft.Icon(ft.Icons.INFO_OUTLINE, color="#3b82f6"),
+                        ft.Column([status_text, status_sub])
+                    ]),
+                    padding=15,
+                    border_radius=15,
+                    bgcolor="#0f172a"
+                ),
                 downloads_block
             ], spacing=15),
             padding=20
