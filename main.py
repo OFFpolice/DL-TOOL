@@ -135,11 +135,15 @@ def main(page: ft.Page):
 
     paste_btn = ft.ElevatedButton(
         "Вставить",
+        icon=ft.Icons.CONTENT_PASTE,
+        style=ft.ButtonStyle(bgcolor="#1f2937", color="white"),
         on_click=paste_clipboard
     )
 
     download_btn = ft.ElevatedButton(
         "Скачать",
+        icon=ft.Icons.DOWNLOAD,
+        style=ft.ButtonStyle(bgcolor="#2563eb", color="white"),
         on_click=lambda e: download()
     )
 
