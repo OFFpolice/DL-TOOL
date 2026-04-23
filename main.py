@@ -1,13 +1,33 @@
 import os
-import json
 import yt_dlp
 import threading
+import json
 
 import flet as ft
 import flet_permission_handler as fph
 
-# Путь по умолчанию (будет переопределён из client_storage)
 DEFAULT_DOWNLOAD_PATH = "/storage/emulated/0/dl_tool"
+SETTINGS_FILE = "/storage/emulated/0/dl_tool/.settings.json"
+
+
+def load_settings():
+    try:
+        if os.path.exists(SETTINGS_FILE):
+            with open(SETTINGS_FILE, "r") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {"download_path": DEFAULT_DOWNLOAD_PATH}
+
+
+def save_settings(settings: dict):
+    try:
+        os.makedirs(os.path.dirname(SETTINGS_FILE), exist_ok=True)
+        with open(SETTINGS_FILE, "w") as f:
+            json.dump(settings, f)
+    except Exception:
+        pass
+
 
 def main(page: ft.Page):
     page.title = "DL-TOOL"
@@ -18,11 +38,43 @@ def main(page: ft.Page):
 
     ph = fph.PermissionHandler()
 
-    # ------------------------------------------------------------
-    # Состояния и настройки
-    # ------------------------------------------------------------
+    # --- Настройки ---
+    settings = load_settings()
+    download_path = settings.get("download_path", DEFAULT_DOWNLOAD_PATH)
+
+    # Создаём папку при старте
+    try:
+        os.makedirs(download_path, exist_ok=True)
+    except Exception:
+        pass
+
+    # --- История загрузок (in-memory + из папки) ---
+    download_history: list[str] = []
+
+    def load_history_from_folder(path: str) -> list[str]:
+        """Читает список видеофайлов из папки загрузки."""
+        try:
+            files = [
+                f for f in os.listdir(path)
+                if os.path.isfile(os.path.join(path, f))
+                and f.lower().endswith(
+                    (".mp4", ".mkv", ".webm", ".avi", ".mov", ".flv", ".m4v")
+                )
+                and not f.startswith(".")
+            ]
+            files.sort(
+                key=lambda x: os.path.getmtime(os.path.join(path, x)),
+                reverse=True
+            )
+            return files
+        except Exception:
+            return []
+
+    # --- Состояние ---
     status_text = ft.Text("Готов к скачиванию", size=16, weight="bold")
-    status_sub = ft.Text("Вставьте ссылку и нажмите «Скачать»", size=12, color="#8a8f9c")
+    status_sub = ft.Text(
+        "Вставьте ссылку и нажмите «Скачать»", size=12, color="#8a8f9c"
+    )
 
     url_input = ft.TextField(
         hint_text="Введите ссылку",
@@ -33,21 +85,15 @@ def main(page: ft.Page):
         color="white",
     )
 
-    # Два независимых списка: для главной и для истории
-    last_downloads_column = ft.Column()  # на главной
-    history_downloads_column = ft.Column()  # в разделе «История»
+    downloads_column = ft.Column()
 
-    # Путь, загружаемый из client_storage
-    download_path = DEFAULT_DOWNLOAD_PATH
+    # ─── Вспомогательные функции ────────────────────────────────────────────
 
-    # ------------------------------------------------------------
-    # Вспомогательные функции
-    # ------------------------------------------------------------
     def show_snackbar(message: str):
         page.open(ft.SnackBar(ft.Text(message)))
 
-    def update_status(main, sub):
-        status_text.value = main
+    def update_status(main_text, sub):
+        status_text.value = main_text
         status_sub.value = sub
         page.update()
 
@@ -56,69 +102,67 @@ def main(page: ft.Page):
         paste_btn.disabled = state
         page.update()
 
-    def refresh_main_downloads():
-        if last_downloads_column.controls:
-            main_downloads_container.content = last_downloads_column
-        else:
-            main_downloads_container.content = empty_block
-        page.update()
-
-    def refresh_history_downloads():
-        if history_downloads_column.controls:
-            history_downloads_container.content = history_downloads_column
-        else:
-            history_downloads_container.content = empty_block_history
-        page.update()
-
-    def add_download_item(title):
-        """Добавляет одну запись в оба списка и сохраняет историю."""
-        item = ft.Container(
-            content=ft.Text(title, size=12),
+    def build_download_item(filename: str) -> ft.Container:
+        return ft.Container(
+            content=ft.Row(
+                [
+                    ft.Icon(ft.Icons.VIDEO_FILE, color="#3b82f6", size=20),
+                    ft.Text(filename, size=12, expand=True, no_wrap=False),
+                ],
+                spacing=10,
+            ),
             padding=10,
             bgcolor="#111827",
             border_radius=10,
         )
-        # Добавляем в начало обоих списков
-        last_downloads_column.controls.insert(0, item)
-        history_downloads_column.controls.insert(0, ft.Container(
-            content=ft.Text(title, size=12),
-            padding=10,
-            bgcolor="#111827",
-            border_radius=10,
-        ))
-        # Обновляем отображения
-        refresh_main_downloads()
-        refresh_history_downloads()
-        # Сохраняем историю в client_storage (только названия)
-        page.run_task(save_history)
 
-    async def save_history():
-        titles = [c.content.value for c in history_downloads_column.controls if isinstance(c.content, ft.Text)]
-        await page.client_storage.set_async("history", json.dumps(titles))
+    empty_block = ft.Column(
+        [
+            ft.Icon(ft.Icons.FOLDER, size=50, color="#3b82f6"),
+            ft.Text("Здесь пока пусто"),
+            ft.Text(
+                "Ваши скачанные видео появятся здесь",
+                size=12,
+                color="#8a8f9c",
+            ),
+        ],
+        alignment=ft.MainAxisAlignment.CENTER,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+    )
 
-    async def load_history():
-        data = await page.client_storage.get_async("history")
-        if data:
-            try:
-                titles = json.loads(data)
-                for t in titles:
-                    # Добавляем в оба списка без повторного сохранения
-                    item = ft.Container(
-                        content=ft.Text(t, size=12),
-                        padding=10,
-                        bgcolor="#111827",
-                        border_radius=10,
-                    )
-                    last_downloads_column.controls.append(item)
-                    history_downloads_column.controls.append(item)
-            except Exception:
-                pass
+    downloads_container = ft.Container(
+        content=empty_block,
+        padding=20,
+        alignment=ft.Alignment(0, 0),
+    )
+
+    def refresh_downloads():
+        if downloads_column.controls:
+            downloads_container.content = downloads_column
+        else:
+            downloads_container.content = empty_block
+        page.update()
+
+    def add_download_item(filename: str):
+        download_history.insert(0, filename)
+        downloads_column.controls.insert(0, build_download_item(filename))
+        refresh_downloads()
+
+    def rebuild_history_from_folder():
+        """Перестраивает колонку истории из папки загрузки."""
+        files = load_history_from_folder(download_path)
+        downloads_column.controls.clear()
+        for f in files:
+            downloads_column.controls.append(build_download_item(f))
+        refresh_downloads()
+
+    # Загружаем историю при старте
+    rebuild_history_from_folder()
+
+    # ─── Разрешения ─────────────────────────────────────────────────────────
 
     async def check_permissions():
-        required = [
-            fph.Permission.STORAGE,
-            fph.Permission.VIDEOS,
-        ]
+        required = [fph.Permission.STORAGE, fph.Permission.VIDEOS]
         for perm in required:
             try:
                 status = await ph.get_status(perm)
@@ -132,6 +176,8 @@ def main(page: ft.Page):
                 continue
         return True
 
+    # ─── Скачивание ─────────────────────────────────────────────────────────
+
     def download():
         url = url_input.value.strip()
         if not url:
@@ -143,31 +189,47 @@ def main(page: ft.Page):
             if not ok:
                 return
 
+            # Убеждаемся, что папка существует
+            try:
+                os.makedirs(download_path, exist_ok=True)
+            except Exception as ex:
+                page.call_from_thread(
+                    lambda: update_status("Ошибка", f"Не удалось создать папку: {ex}")
+                )
+                return
+
             update_status("Загрузка...", "Подождите")
             set_loading(True)
 
             def run():
                 try:
-                    # Создаём папку, если её нет
-                    os.makedirs(download_path, exist_ok=True)
                     ydl_opts = {
-                        "outtmpl": os.path.join(download_path, "%(title)s.%(ext)s"),
+                        "outtmpl": os.path.join(
+                            download_path, "%(title)s.%(ext)s"
+                        ),
                         "noplaylist": True,
                     }
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                         info = ydl.extract_info(url, download=True)
                         title = info.get("title", "video")
 
-                    page.call_from_thread(lambda: update_status("Готово", "Видео скачано"))
+                    page.call_from_thread(
+                        lambda: update_status("Готово", "Видео скачано")
+                    )
                     page.call_from_thread(lambda: add_download_item(title))
+
                 except Exception as e:
-                    page.call_from_thread(lambda: update_status("Ошибка", str(e)))
+                    page.call_from_thread(
+                        lambda: update_status("Ошибка", str(e))
+                    )
                 finally:
                     page.call_from_thread(lambda: set_loading(False))
 
             threading.Thread(target=run).start()
 
         page.run_task(start)
+
+    # ─── Буфер ──────────────────────────────────────────────────────────────
 
     async def paste_clipboard(e):
         try:
@@ -180,15 +242,15 @@ def main(page: ft.Page):
         except Exception:
             show_snackbar("Ошибка буфера")
 
-    # ------------------------------------------------------------
-    # UI элементы
-    # ------------------------------------------------------------
+    # ─── Кнопки ─────────────────────────────────────────────────────────────
+
     paste_btn = ft.ElevatedButton(
         "Вставить",
         icon=ft.Icons.CONTENT_PASTE,
         style=ft.ButtonStyle(bgcolor="#1f2937", color="white"),
         on_click=paste_clipboard,
     )
+
     download_btn = ft.ElevatedButton(
         "Скачать",
         icon=ft.Icons.DOWNLOAD,
@@ -196,184 +258,268 @@ def main(page: ft.Page):
         on_click=lambda e: download(),
     )
 
-    empty_block = ft.Column(
-        [
-            ft.Icon(ft.Icons.FOLDER, size=50, color="#3b82f6"),
-            ft.Text("Здесь пока пусто"),
-            ft.Text("Ваши скачанные видео появятся здесь", size=12, color="#8a8f9c"),
-        ],
-        alignment=ft.MainAxisAlignment.CENTER,
-        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-    )
-    empty_block_history = ft.Column(
-        [
-            ft.Icon(ft.Icons.HISTORY, size=50, color="#3b82f6"),
-            ft.Text("История пуста"),
-            ft.Text("Здесь будут отображаться все ваши загрузки", size=12, color="#8a8f9c"),
-        ],
-        alignment=ft.MainAxisAlignment.CENTER,
-        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-    )
+    # ─── Блок загрузок (главная вкладка) ────────────────────────────────────
 
-    # Контейнеры для отображения списков
-    main_downloads_container = ft.Container(
-        content=empty_block,
-        padding=20,
-        alignment=ft.Alignment(0, 0),
-    )
-    history_downloads_container = ft.Container(
-        content=empty_block_history,
-        padding=20,
-        alignment=ft.Alignment(0, 0),
-    )
-
-    # Блок на главной (без кнопки "Открыть папку")
     downloads_block = ft.Container(
-        content=ft.Column([
-            ft.Text("Последние загрузки", size=16, weight="bold"),
-            main_downloads_container,
-        ]),
+        content=ft.Column(
+            [
+                ft.Text("Последние загрузки", size=16, weight="bold"),
+                downloads_container,
+            ]
+        ),
         padding=15,
         border_radius=20,
         bgcolor="#0f172a",
     )
 
-    # Заголовок
-    header = ft.Row([
-        ft.Row([
-            ft.Text("DL", size=28, weight="bold", color="#3b82f6"),
-            ft.Text("TOOL", size=28, weight="bold"),
-        ]),
-        ft.IconButton(icon=ft.Icons.SETTINGS, on_click=lambda e: open_settings()),
-    ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+    # ─── Страница «Скачать» ──────────────────────────────────────────────────
 
-    # ------------------------------------------------------------
-    # Интерфейс смены папки
-    # ------------------------------------------------------------
-    async def open_settings():
-        path_field = ft.TextField(
-            value=download_path,
-            hint_text="/storage/emulated/0/dl_tool",
-            expand=True,
-            bgcolor="#111827",
-            border_radius=12,
-            border_color="#1f2937",
-            color="white",
-        )
+    download_page_content = ft.Column(
+        [
+            ft.Container(
+                content=ft.Column(
+                    [
+                        url_input,
+                        ft.Row(
+                            [paste_btn, download_btn],
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                        ),
+                    ],
+                    spacing=15,
+                ),
+                padding=20,
+                border_radius=20,
+                bgcolor="#0f172a",
+                border=ft.border.all(1, "#1f2937"),
+            ),
+            ft.Text("Статус", size=16, weight="bold"),
+            ft.Container(
+                content=ft.Row(
+                    [
+                        ft.Icon(ft.Icons.INFO_OUTLINE, color="#3b82f6"),
+                        ft.Column([status_text, status_sub]),
+                    ]
+                ),
+                padding=15,
+                border_radius=15,
+                bgcolor="#0f172a",
+            ),
+            downloads_block,
+        ],
+        spacing=15,
+    )
 
-        async def save_path(e):
-            nonlocal download_path
-            new_path = path_field.value.strip()
-            if not new_path:
-                show_snackbar("Путь не может быть пустым")
-                return
-            # Пытаемся создать папку
-            try:
-                os.makedirs(new_path, exist_ok=True)
-                download_path = new_path
-                await page.client_storage.set_async("download_path", new_path)
-                show_snackbar("Папка сохранена")
-                page.close(dialog)
-            except Exception as ex:
-                show_snackbar(f"Ошибка: {ex}")
+    # ─── Страница «История» ──────────────────────────────────────────────────
 
-        dialog = ft.AlertDialog(
-            title=ft.Text("Настройки папки загрузок"),
-            content=ft.Column([
-                ft.Text("Введите полный путь к папке:"),
-                path_field,
-            ], tight=True),
-            actions=[
-                ft.TextButton("Отмена", on_click=lambda e: page.close(dialog)),
-                ft.ElevatedButton("Сохранить", on_click=save_path),
-            ],
-        )
-        page.open(dialog)
+    history_column = ft.Column(spacing=10)
 
-    # ------------------------------------------------------------
-    # Навигация
-    # ------------------------------------------------------------
-    view_main = ft.Column([
-        header,
-        ft.Container(
-            content=ft.Column([
-                url_input,
-                ft.Row([paste_btn, download_btn], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-            ], spacing=15),
-            padding=20,
-            border_radius=20,
-            bgcolor="#0f172a",
-            border=ft.border.all(1, "#1f2937"),
-        ),
-        ft.Text("Статус", size=16, weight="bold"),
-        ft.Container(
-            content=ft.Row([
-                ft.Icon(ft.Icons.INFO_OUTLINE, color="#3b82f6"),
-                ft.Column([status_text, status_sub]),
-            ]),
-            padding=15,
-            border_radius=15,
-            bgcolor="#0f172a",
-        ),
-        downloads_block,
-    ], spacing=15)
+    history_empty = ft.Column(
+        [
+            ft.Icon(ft.Icons.HISTORY, size=50, color="#3b82f6"),
+            ft.Text("История пуста"),
+            ft.Text(
+                "Скачанные видео появятся здесь", size=12, color="#8a8f9c"
+            ),
+        ],
+        alignment=ft.MainAxisAlignment.CENTER,
+        horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+    )
 
-    view_history = ft.Column([
-        header,
-        ft.Text("История загрузок", size=20, weight="bold"),
-        history_downloads_container,
-    ], spacing=15)
-
-    main_container = ft.Container(
-        content=ft.Stack([
-            ft.Container(content=view_main, visible=True),
-            ft.Container(content=view_history, visible=False),
-        ]),
+    history_container = ft.Container(
+        content=history_empty,
         padding=20,
+        alignment=ft.Alignment(0, 0),
         expand=True,
     )
 
-    def switch_tab(index):
-        # Получаем детей Stack (их всего два)
-        stack_children = main_container.content.controls
-        stack_children[0].visible = (index == 0)
-        stack_children[1].visible = (index == 1)
+    def refresh_history_page():
+        files = load_history_from_folder(download_path)
+        history_column.controls.clear()
+        if files:
+            for f in files:
+                history_column.controls.append(
+                    ft.Container(
+                        content=ft.Row(
+                            [
+                                ft.Icon(
+                                    ft.Icons.VIDEO_FILE,
+                                    color="#3b82f6",
+                                    size=20,
+                                ),
+                                ft.Text(f, size=12, expand=True, no_wrap=False),
+                            ],
+                            spacing=10,
+                        ),
+                        padding=10,
+                        bgcolor="#111827",
+                        border_radius=10,
+                    )
+                )
+            history_container.content = history_column
+        else:
+            history_container.content = history_empty
         page.update()
+
+    history_page_content = ft.Column(
+        [
+            ft.Text("История загрузок", size=18, weight="bold"),
+            history_container,
+        ],
+        spacing=15,
+        expand=True,
+    )
+
+    # ─── Страница «Настройки» ────────────────────────────────────────────────
+
+    path_field = ft.TextField(
+        value=download_path,
+        label="Папка для загрузки",
+        bgcolor="#111827",
+        border_radius=12,
+        border_color="#1f2937",
+        color="white",
+        expand=True,
+    )
+
+    def save_path(e):
+        nonlocal download_path
+        new_path = path_field.value.strip()
+        if not new_path:
+            show_snackbar("Путь не может быть пустым")
+            return
+        try:
+            os.makedirs(new_path, exist_ok=True)
+        except Exception as ex:
+            show_snackbar(f"Ошибка создания папки: {ex}")
+            return
+        download_path = new_path
+        settings["download_path"] = download_path
+        save_settings(settings)
+        show_snackbar("Папка сохранена")
+        rebuild_history_from_folder()
+
+    def reset_path(e):
+        path_field.value = DEFAULT_DOWNLOAD_PATH
+        page.update()
+
+    settings_page_content = ft.Column(
+        [
+            ft.Text("Настройки", size=18, weight="bold"),
+            ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Text(
+                            "Папка для загрузки видео",
+                            size=14,
+                            weight="bold",
+                        ),
+                        ft.Text(
+                            "Укажите путь, куда будут сохраняться видео",
+                            size=12,
+                            color="#8a8f9c",
+                        ),
+                        ft.Row(
+                            [
+                                path_field,
+                            ]
+                        ),
+                        ft.Row(
+                            [
+                                ft.ElevatedButton(
+                                    "Сохранить",
+                                    icon=ft.Icons.SAVE,
+                                    style=ft.ButtonStyle(
+                                        bgcolor="#2563eb", color="white"
+                                    ),
+                                    on_click=save_path,
+                                ),
+                                ft.TextButton(
+                                    "По умолчанию",
+                                    on_click=reset_path,
+                                ),
+                            ],
+                            spacing=10,
+                        ),
+                    ],
+                    spacing=12,
+                ),
+                padding=15,
+                border_radius=15,
+                bgcolor="#0f172a",
+                border=ft.border.all(1, "#1f2937"),
+            ),
+        ],
+        spacing=15,
+    )
+
+    # ─── Навигация ───────────────────────────────────────────────────────────
+
+    body = ft.Container(expand=True)
+
+    def show_page(index: int):
+        if index == 0:
+            body.content = download_page_content
+        elif index == 1:
+            refresh_history_page()
+            body.content = history_page_content
+        elif index == 2:
+            body.content = settings_page_content
+        page.update()
+
+    def on_nav_change(e):
+        show_page(e.control.selected_index)
 
     nav = ft.NavigationBar(
         destinations=[
-            ft.NavigationBarDestination(icon=ft.Icons.DOWNLOAD, label="Скачать"),
-            ft.NavigationBarDestination(icon=ft.Icons.HISTORY, label="История"),
+            ft.NavigationBarDestination(
+                icon=ft.Icons.DOWNLOAD, label="Скачать"
+            ),
+            ft.NavigationBarDestination(
+                icon=ft.Icons.HISTORY, label="История"
+            ),
+            ft.NavigationBarDestination(
+                icon=ft.Icons.SETTINGS, label="Настройки"
+            ),
         ],
         bgcolor="#0f172a",
-        on_change=lambda e: switch_tab(e.control.selected_index),
+        on_change=on_nav_change,
     )
 
-    # ------------------------------------------------------------
-    # Инициализация приложения
-    # ------------------------------------------------------------
-    async def init():
-        nonlocal download_path
-        # Загружаем путь
-        saved_path = await page.client_storage.get_async("download_path")
-        if saved_path and isinstance(saved_path, str):
-            download_path = saved_path
-        # Пытаемся создать папку
-        try:
-            os.makedirs(download_path, exist_ok=True)
-        except Exception:
-            show_snackbar(f"Не удалось создать папку {download_path}")
-            download_path = DEFAULT_DOWNLOAD_PATH
-            await page.client_storage.set_async("download_path", download_path)
+    def open_settings(e):
+        nav.selected_index = 2
+        show_page(2)
 
-        # Загружаем историю
-        await load_history()
-        refresh_main_downloads()
-        refresh_history_downloads()
-        page.update()
+    header = ft.Row(
+        [
+            ft.Row(
+                [
+                    ft.Text("DL", size=28, weight="bold", color="#3b82f6"),
+                    ft.Text("TOOL", size=28, weight="bold"),
+                ]
+            ),
+            ft.IconButton(
+                icon=ft.Icons.SETTINGS, on_click=open_settings
+            ),
+        ],
+        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+    )
 
-    page.add(main_container)
+    show_page(0)
+
+    content = ft.SafeArea(
+        content=ft.Container(
+            content=ft.Column(
+                [header, body],
+                spacing=15,
+                expand=True,
+            ),
+            padding=20,
+            expand=True,
+        )
+    )
+
+    page.add(content)
     page.navigation_bar = nav
-    page.run_task(init)
+
 
 ft.run(main, assets_dir="assets")
