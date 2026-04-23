@@ -6,8 +6,8 @@ import json
 import flet as ft
 import flet_permission_handler as fph
 
-DEFAULT_DOWNLOAD_PATH = "/storage/emulated/0/dl_tool"
-SETTINGS_FILE = "/storage/emulated/0/dl_tool/.settings.json"
+DEFAULT_DOWNLOAD_PATH = "/storage/emulated/0/Download"
+SETTINGS_FILE = "/storage/emulated/0/Download/.settings.json"
 
 
 def load_settings():
