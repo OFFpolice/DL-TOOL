@@ -42,17 +42,10 @@ def main(page: ft.Page):
     settings = load_settings()
     download_path = settings.get("download_path", DEFAULT_DOWNLOAD_PATH)
 
-    # Создаём папку при старте
-    try:
-        os.makedirs(download_path, exist_ok=True)
-    except Exception:
-        pass
-
-    # --- История загрузок (in-memory + из папки) ---
+    # --- История загрузок ---
     download_history: list[str] = []
 
     def load_history_from_folder(path: str) -> list[str]:
-        """Читает список видеофайлов из папки загрузки."""
         try:
             files = [
                 f for f in os.listdir(path)
@@ -64,13 +57,86 @@ def main(page: ft.Page):
             ]
             files.sort(
                 key=lambda x: os.path.getmtime(os.path.join(path, x)),
-                reverse=True
+                reverse=True,
             )
             return files
         except Exception:
             return []
 
-    # --- Состояние ---
+    # ─── Вспомогательные функции ────────────────────────────────────────────
+
+    def show_snackbar(message: str):
+        page.snack_bar = ft.SnackBar(ft.Text(message), open=True)
+        page.update()
+
+    # ─── Разрешения ─────────────────────────────────────────────────────────
+
+    async def request_all_permissions() -> bool:
+        """
+        Запрашивает все необходимые разрешения.
+        MANAGE_EXTERNAL_STORAGE даёт полный доступ к /storage/emulated/0/
+        на Android 11+. Без него создать папку вне app-каталога невозможно.
+        """
+        required = [
+            fph.Permission.STORAGE,
+            fph.Permission.MANAGE_EXTERNAL_STORAGE,
+            fph.Permission.VIDEOS,
+        ]
+        all_granted = True
+        for perm in required:
+            try:
+                status = await ph.get_status(perm)
+                if not status or status.name != "GRANTED":
+                    status = await ph.request(perm)
+                if not status or status.name != "GRANTED":
+                    if perm == fph.Permission.MANAGE_EXTERNAL_STORAGE:
+                        # Открываем системный экран «Доступ ко всем файлам»
+                        await ph.open_app_settings()
+                    all_granted = False
+            except Exception:
+                continue
+        return all_granted
+
+    # ─── Навигация / хедер ──────────────────────────────────────────────────
+
+    current_tab = [0]
+    body = ft.Container(expand=True)
+
+    back_btn = ft.IconButton(
+        icon=ft.Icons.ARROW_BACK,
+        icon_color="white",
+        visible=False,
+        on_click=lambda e: go_home(),
+    )
+    header_title = ft.Row(
+        [
+            ft.Text("DL", size=28, weight="bold", color="#3b82f6"),
+            ft.Text("TOOL", size=28, weight="bold"),
+        ]
+    )
+    header = ft.Row(
+        [
+            ft.Row([back_btn, header_title]),
+        ],
+        alignment=ft.MainAxisAlignment.START,
+    )
+
+    nav = ft.NavigationBar(
+        destinations=[
+            ft.NavigationBarDestination(icon=ft.Icons.DOWNLOAD, label="Скачать"),
+            ft.NavigationBarDestination(icon=ft.Icons.HISTORY, label="История"),
+            ft.NavigationBarDestination(icon=ft.Icons.SETTINGS, label="Настройки"),
+        ],
+        bgcolor="#0f172a",
+        on_change=lambda e: show_page(e.control.selected_index),
+    )
+
+    def go_home():
+        nav.selected_index = 0
+        show_page(0)
+
+    # ─── Состояние загрузчика ────────────────────────────────────────────────
+
     status_text = ft.Text("Готов к скачиванию", size=16, weight="bold")
     status_sub = ft.Text(
         "Вставьте ссылку и нажмите «Скачать»", size=12, color="#8a8f9c"
@@ -87,23 +153,12 @@ def main(page: ft.Page):
 
     downloads_column = ft.Column()
 
-    # ─── Вспомогательные функции ────────────────────────────────────────────
-
-    def show_snackbar(message: str):
-        page.snack_bar = ft.SnackBar(ft.Text(message), open=True)
-        page.update()
-
     def update_status(main_text, sub):
         status_text.value = main_text
         status_sub.value = sub
         page.update()
 
-    def set_loading(state: bool):
-        download_btn.disabled = state
-        paste_btn.disabled = state
-        page.update()
-
-    def build_download_item(filename: str) -> ft.Container:
+    def build_video_item(filename: str) -> ft.Container:
         return ft.Container(
             content=ft.Row(
                 [
@@ -138,46 +193,40 @@ def main(page: ft.Page):
     )
 
     def refresh_downloads():
-        if downloads_column.controls:
-            downloads_container.content = downloads_column
-        else:
-            downloads_container.content = empty_block
+        downloads_container.content = (
+            downloads_column if downloads_column.controls else empty_block
+        )
         page.update()
 
     def add_download_item(filename: str):
         download_history.insert(0, filename)
-        downloads_column.controls.insert(0, build_download_item(filename))
+        downloads_column.controls.insert(0, build_video_item(filename))
         refresh_downloads()
 
     def rebuild_history_from_folder():
-        """Перестраивает колонку истории из папки загрузки."""
         files = load_history_from_folder(download_path)
         downloads_column.controls.clear()
         for f in files:
-            downloads_column.controls.append(build_download_item(f))
+            downloads_column.controls.append(build_video_item(f))
         refresh_downloads()
 
-    # Загружаем историю при старте
-    rebuild_history_from_folder()
-
-    # ─── Разрешения ─────────────────────────────────────────────────────────
-
-    async def check_permissions():
-        required = [fph.Permission.STORAGE, fph.Permission.VIDEOS]
-        for perm in required:
-            try:
-                status = await ph.get_status(perm)
-                if not status or status.name != "GRANTED":
-                    status = await ph.request(perm)
-                if not status or status.name != "GRANTED":
-                    show_snackbar(f"Нет разрешения: {perm.name}")
-                    await ph.open_app_settings()
-                    return False
-            except Exception:
-                continue
-        return True
-
     # ─── Скачивание ─────────────────────────────────────────────────────────
+
+    paste_btn = ft.ElevatedButton(
+        "Вставить",
+        icon=ft.Icons.CONTENT_PASTE,
+        style=ft.ButtonStyle(bgcolor="#1f2937", color="white"),
+    )
+    download_btn = ft.ElevatedButton(
+        "Скачать",
+        icon=ft.Icons.DOWNLOAD,
+        style=ft.ButtonStyle(bgcolor="#2563eb", color="white"),
+    )
+
+    def set_loading(state: bool):
+        download_btn.disabled = state
+        paste_btn.disabled = state
+        page.update()
 
     def download():
         url = url_input.value.strip()
@@ -186,17 +235,14 @@ def main(page: ft.Page):
             return
 
         async def start():
-            ok = await check_permissions()
+            ok = await request_all_permissions()
             if not ok:
+                show_snackbar("Нет необходимых разрешений")
                 return
-
-            # Убеждаемся, что папка существует
             try:
                 os.makedirs(download_path, exist_ok=True)
             except Exception as ex:
-                page.call_from_thread(
-                    lambda: update_status("Ошибка", f"Не удалось создать папку: {ex}")
-                )
+                update_status("Ошибка", f"Не удалось создать папку: {ex}")
                 return
 
             update_status("Загрузка...", "Подождите")
@@ -213,12 +259,10 @@ def main(page: ft.Page):
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                         info = ydl.extract_info(url, download=True)
                         title = info.get("title", "video")
-
                     page.call_from_thread(
                         lambda: update_status("Готово", "Видео скачано")
                     )
                     page.call_from_thread(lambda: add_download_item(title))
-
                 except Exception as e:
                     page.call_from_thread(
                         lambda: update_status("Ошибка", str(e))
@@ -229,8 +273,6 @@ def main(page: ft.Page):
             threading.Thread(target=run).start()
 
         page.run_task(start)
-
-    # ─── Буфер ──────────────────────────────────────────────────────────────
 
     async def paste_clipboard(e):
         try:
@@ -243,23 +285,10 @@ def main(page: ft.Page):
         except Exception:
             show_snackbar("Ошибка буфера")
 
-    # ─── Кнопки ─────────────────────────────────────────────────────────────
+    paste_btn.on_click = paste_clipboard
+    download_btn.on_click = lambda e: download()
 
-    paste_btn = ft.ElevatedButton(
-        "Вставить",
-        icon=ft.Icons.CONTENT_PASTE,
-        style=ft.ButtonStyle(bgcolor="#1f2937", color="white"),
-        on_click=paste_clipboard,
-    )
-
-    download_btn = ft.ElevatedButton(
-        "Скачать",
-        icon=ft.Icons.DOWNLOAD,
-        style=ft.ButtonStyle(bgcolor="#2563eb", color="white"),
-        on_click=lambda e: download(),
-    )
-
-    # ─── Блок загрузок (главная вкладка) ────────────────────────────────────
+    # ─── Страница «Скачать» ──────────────────────────────────────────────────
 
     downloads_block = ft.Container(
         content=ft.Column(
@@ -272,8 +301,6 @@ def main(page: ft.Page):
         border_radius=20,
         bgcolor="#0f172a",
     )
-
-    # ─── Страница «Скачать» ──────────────────────────────────────────────────
 
     download_page_content = ft.Column(
         [
@@ -342,11 +369,7 @@ def main(page: ft.Page):
                     ft.Container(
                         content=ft.Row(
                             [
-                                ft.Icon(
-                                    ft.Icons.VIDEO_FILE,
-                                    color="#3b82f6",
-                                    size=20,
-                                ),
+                                ft.Icon(ft.Icons.VIDEO_FILE, color="#3b82f6", size=20),
                                 ft.Text(f, size=12, expand=True, no_wrap=False),
                             ],
                             spacing=10,
@@ -362,10 +385,7 @@ def main(page: ft.Page):
         page.update()
 
     history_page_content = ft.Column(
-        [
-            ft.Text("История загрузок", size=18, weight="bold"),
-            history_container,
-        ],
+        [history_container],
         spacing=15,
         expand=True,
     )
@@ -383,25 +403,29 @@ def main(page: ft.Page):
     )
 
     def save_path(e):
-        nonlocal download_path
         new_path = path_field.value.strip()
         if not new_path:
             show_snackbar("Путь не может быть пустым")
             return
 
         async def do_save():
-            ok = await check_permissions()
+            nonlocal download_path
+            ok = await request_all_permissions()
             if not ok:
+                show_snackbar(
+                    "Нет разрешения на запись. Выдайте «Доступ ко всем файлам» в настройках."
+                )
                 return
             try:
                 os.makedirs(new_path, exist_ok=True)
             except Exception as ex:
                 show_snackbar(f"Ошибка создания папки: {ex}")
                 return
-            nonlocal download_path
             download_path = new_path
             settings["download_path"] = download_path
             save_settings(settings)
+            path_field.value = download_path
+            page.update()
             show_snackbar("Папка сохранена")
             rebuild_history_from_folder()
 
@@ -413,25 +437,16 @@ def main(page: ft.Page):
 
     settings_page_content = ft.Column(
         [
-            ft.Text("Настройки", size=18, weight="bold"),
             ft.Container(
                 content=ft.Column(
                     [
-                        ft.Text(
-                            "Папка для загрузки видео",
-                            size=14,
-                            weight="bold",
-                        ),
+                        ft.Text("Папка для загрузки видео", size=14, weight="bold"),
                         ft.Text(
                             "Укажите путь, куда будут сохраняться видео",
                             size=12,
                             color="#8a8f9c",
                         ),
-                        ft.Row(
-                            [
-                                path_field,
-                            ]
-                        ),
+                        ft.Row([path_field]),
                         ft.Row(
                             [
                                 ft.ElevatedButton(
@@ -461,52 +476,31 @@ def main(page: ft.Page):
         spacing=15,
     )
 
-    # ─── Навигация ───────────────────────────────────────────────────────────
-
-    body = ft.Container(expand=True)
+    # ─── show_page ───────────────────────────────────────────────────────────
 
     def show_page(index: int):
+        current_tab[0] = index
+
+        # Кнопка «назад» видна на истории (1) и настройках (2)
+        back_btn.visible = index in (1, 2)
+        # Кнопка настроек скрыта, когда уже на странице настроек
+        # Навбар скрываем на странице настроек
+        page.navigation_bar = nav if index != 2 else None
+        if index < 2:
+            nav.selected_index = index
+
         if index == 0:
             body.content = download_page_content
         elif index == 1:
             refresh_history_page()
             body.content = history_page_content
         elif index == 2:
+            path_field.value = download_path
             body.content = settings_page_content
+
         page.update()
 
-    def on_nav_change(e):
-        show_page(e.control.selected_index)
-
-    nav = ft.NavigationBar(
-        destinations=[
-            ft.NavigationBarDestination(
-                icon=ft.Icons.DOWNLOAD, label="Скачать"
-            ),
-            ft.NavigationBarDestination(
-                icon=ft.Icons.HISTORY, label="История"
-            ),
-            ft.NavigationBarDestination(
-                icon=ft.Icons.SETTINGS, label="Настройки"
-            ),
-        ],
-        bgcolor="#0f172a",
-        on_change=on_nav_change,
-    )
-
-    header = ft.Row(
-        [
-            ft.Row(
-                [
-                    ft.Text("DL", size=28, weight="bold", color="#3b82f6"),
-                    ft.Text("TOOL", size=28, weight="bold"),
-                ]
-            ),
-        ],
-        alignment=ft.MainAxisAlignment.START,
-    )
-
-    show_page(0)
+    # ─── Сборка страницы ─────────────────────────────────────────────────────
 
     content = ft.SafeArea(
         content=ft.Container(
@@ -522,25 +516,13 @@ def main(page: ft.Page):
 
     page.add(content)
     page.navigation_bar = nav
+    show_page(0)
+
+    # ─── Запрос разрешений при старте ───────────────────────────────────────
 
     async def request_permissions_on_start():
-        required = [
-            fph.Permission.STORAGE,
-            fph.Permission.MANAGE_EXTERNAL_STORAGE,
-            fph.Permission.VIDEOS,
-        ]
-        all_granted = True
-        for perm in required:
-            try:
-                status = await ph.get_status(perm)
-                if not status or status.name != "GRANTED":
-                    status = await ph.request(perm)
-                if not status or status.name != "GRANTED":
-                    all_granted = False
-            except Exception:
-                continue
-
-        if all_granted:
+        granted = await request_all_permissions()
+        if granted:
             try:
                 os.makedirs(download_path, exist_ok=True)
             except Exception:
@@ -549,8 +531,7 @@ def main(page: ft.Page):
         else:
             page.snack_bar = ft.SnackBar(
                 ft.Text(
-                    "Некоторые разрешения не выданы. "
-                    "Функции приложения могут быть ограничены."
+                    "Выдайте разрешение «Доступ ко всем файлам» в настройках приложения."
                 ),
                 open=True,
             )
