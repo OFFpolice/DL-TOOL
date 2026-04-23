@@ -90,7 +90,8 @@ def main(page: ft.Page):
     # ─── Вспомогательные функции ────────────────────────────────────────────
 
     def show_snackbar(message: str):
-        page.open(ft.SnackBar(ft.Text(message)))
+        page.snack_bar = ft.SnackBar(ft.Text(message), open=True)
+        page.update()
 
     def update_status(main_text, sub):
         status_text.value = main_text
@@ -387,16 +388,24 @@ def main(page: ft.Page):
         if not new_path:
             show_snackbar("Путь не может быть пустым")
             return
-        try:
-            os.makedirs(new_path, exist_ok=True)
-        except Exception as ex:
-            show_snackbar(f"Ошибка создания папки: {ex}")
-            return
-        download_path = new_path
-        settings["download_path"] = download_path
-        save_settings(settings)
-        show_snackbar("Папка сохранена")
-        rebuild_history_from_folder()
+
+        async def do_save():
+            ok = await check_permissions()
+            if not ok:
+                return
+            try:
+                os.makedirs(new_path, exist_ok=True)
+            except Exception as ex:
+                show_snackbar(f"Ошибка создания папки: {ex}")
+                return
+            nonlocal download_path
+            download_path = new_path
+            settings["download_path"] = download_path
+            save_settings(settings)
+            show_snackbar("Папка сохранена")
+            rebuild_history_from_folder()
+
+        page.run_task(do_save)
 
     def reset_path(e):
         path_field.value = DEFAULT_DOWNLOAD_PATH
@@ -485,10 +494,6 @@ def main(page: ft.Page):
         on_change=on_nav_change,
     )
 
-    def open_settings(e):
-        nav.selected_index = 2
-        show_page(2)
-
     header = ft.Row(
         [
             ft.Row(
@@ -497,11 +502,8 @@ def main(page: ft.Page):
                     ft.Text("TOOL", size=28, weight="bold"),
                 ]
             ),
-            ft.IconButton(
-                icon=ft.Icons.SETTINGS, on_click=open_settings
-            ),
         ],
-        alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+        alignment=ft.MainAxisAlignment.START,
     )
 
     show_page(0)
@@ -520,6 +522,41 @@ def main(page: ft.Page):
 
     page.add(content)
     page.navigation_bar = nav
+
+    async def request_permissions_on_start():
+        required = [
+            fph.Permission.STORAGE,
+            fph.Permission.MANAGE_EXTERNAL_STORAGE,
+            fph.Permission.VIDEOS,
+        ]
+        all_granted = True
+        for perm in required:
+            try:
+                status = await ph.get_status(perm)
+                if not status or status.name != "GRANTED":
+                    status = await ph.request(perm)
+                if not status or status.name != "GRANTED":
+                    all_granted = False
+            except Exception:
+                continue
+
+        if all_granted:
+            try:
+                os.makedirs(download_path, exist_ok=True)
+            except Exception:
+                pass
+            rebuild_history_from_folder()
+        else:
+            page.snack_bar = ft.SnackBar(
+                ft.Text(
+                    "Некоторые разрешения не выданы. "
+                    "Функции приложения могут быть ограничены."
+                ),
+                open=True,
+            )
+            page.update()
+
+    page.run_task(request_permissions_on_start)
 
 
 ft.run(main, assets_dir="assets")
