@@ -1,7 +1,7 @@
 import os
-import json
 import yt_dlp
 import threading
+import json
 
 import flet as ft
 import flet_permission_handler as fph
@@ -374,7 +374,7 @@ def main(page: ft.Page):
                                     height=64,
                                     bgcolor="#3b82f6",
                                     border_radius=16,
-                                    alignment=ft.alignment.center,
+                                    alignment=ft.Alignment(0, 0),
                                 ),
                                 ft.Column(
                                     [
