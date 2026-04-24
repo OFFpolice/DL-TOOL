@@ -21,13 +21,20 @@ adaptive_icon_foreground = "assets/icon.png"
 
 [tool.flet.android.permission]
 "android.permission.INTERNET" = true
-"android.permission.READ_MEDIA_VIDEO" = true
 "android.permission.READ_EXTERNAL_STORAGE" = true
 "android.permission.WRITE_EXTERNAL_STORAGE" = true
+"android.permission.MANAGE_EXTERNAL_STORAGE" = true
+"android.permission.READ_MEDIA_VIDEO" = true
+"android.permission.ACCESS_MEDIA_LOCATION" = true
+"android.permission.REQUEST_INSTALL_PACKAGES" = true
+"android.permission.POST_NOTIFICATIONS" = true
+
+[tool.flet.android.uses_permission]
+"android.permission.MANAGE_EXTERNAL_STORAGE" = true
 
 [tool.flet.app]
 module = "main.py"
 
 [tool.flet.android.app.startup_screen]
 show = true
-message = "Start app..."
+message = "Запуск приложения..."
