@@ -1,4 +1,5 @@
 import os
+import sys
 import yt_dlp
 import threading
 import json
@@ -6,6 +7,7 @@ import json
 import flet as ft
 import flet_permission_handler as fph
 
+APP_VERSION = "1.0.0"
 DEFAULT_DOWNLOAD_PATH = "/storage/emulated/0/Download"
 SETTINGS_FILE = "/storage/emulated/0/Download/.settings.json"
 
@@ -37,12 +39,8 @@ def main(page: ft.Page):
     page.scroll = ft.ScrollMode.AUTO
 
     ph = fph.PermissionHandler()
-
-    # --- Настройки ---
     settings = load_settings()
     download_path = settings.get("download_path", DEFAULT_DOWNLOAD_PATH)
-
-    # --- История загрузок ---
     download_history: list[str] = []
 
     def load_history_from_folder(path: str) -> list[str]:
@@ -50,33 +48,19 @@ def main(page: ft.Page):
             files = [
                 f for f in os.listdir(path)
                 if os.path.isfile(os.path.join(path, f))
-                and f.lower().endswith(
-                    (".mp4", ".mkv", ".webm", ".avi", ".mov", ".flv", ".m4v")
-                )
+                and f.lower().endswith((".mp4", ".mkv", ".webm", ".avi", ".mov", ".flv", ".m4v"))
                 and not f.startswith(".")
             ]
-            files.sort(
-                key=lambda x: os.path.getmtime(os.path.join(path, x)),
-                reverse=True,
-            )
+            files.sort(key=lambda x: os.path.getmtime(os.path.join(path, x)), reverse=True)
             return files
         except Exception:
             return []
-
-    # ─── Вспомогательные функции ────────────────────────────────────────────
 
     def show_snackbar(message: str):
         page.snack_bar = ft.SnackBar(ft.Text(message), open=True)
         page.update()
 
-    # ─── Разрешения ─────────────────────────────────────────────────────────
-
     async def request_all_permissions() -> bool:
-        """
-        Запрашивает все необходимые разрешения.
-        MANAGE_EXTERNAL_STORAGE даёт полный доступ к /storage/emulated/0/
-        на Android 11+. Без него создать папку вне app-каталога невозможно.
-        """
         required = [
             fph.Permission.STORAGE,
             fph.Permission.MANAGE_EXTERNAL_STORAGE,
@@ -98,34 +82,23 @@ def main(page: ft.Page):
                     status = await ph.request(perm)
                 if not status or status.name != "GRANTED":
                     if perm == fph.Permission.MANAGE_EXTERNAL_STORAGE:
-                        # Открываем системный экран «Доступ ко всем файлам»
                         await ph.open_app_settings()
                     all_granted = False
             except Exception:
                 continue
         return all_granted
 
-    # ─── Навигация / хедер ──────────────────────────────────────────────────
-
-    current_tab = [0]
     body = ft.Container(expand=True)
 
-    back_btn = ft.IconButton(
-        icon=ft.Icons.ARROW_BACK,
-        icon_color="white",
-        visible=False,
-        on_click=lambda e: go_home(),
-    )
     header_title = ft.Row(
         [
             ft.Text("DL", size=28, weight="bold", color="#3b82f6"),
             ft.Text("TOOL", size=28, weight="bold"),
         ]
     )
+
     header = ft.Row(
-        [
-            ft.Row([back_btn, header_title]),
-        ],
+        [header_title],
         alignment=ft.MainAxisAlignment.START,
     )
 
@@ -133,32 +106,15 @@ def main(page: ft.Page):
         destinations=[
             ft.NavigationBarDestination(icon=ft.Icons.DOWNLOAD, label="Скачать"),
             ft.NavigationBarDestination(icon=ft.Icons.HISTORY, label="История"),
+            ft.NavigationBarDestination(icon=ft.Icons.INFO_OUTLINE, label="О нас"),
             ft.NavigationBarDestination(icon=ft.Icons.SETTINGS, label="Настройки"),
         ],
         bgcolor="#0f172a",
         on_change=lambda e: show_page(e.control.selected_index),
     )
 
-    def go_home():
-        nav.selected_index = 0
-        show_page(0)
-
-    def on_pop_route(e):
-        """Перехватывает системную кнопку «Назад» на Android."""
-        if current_tab[0] in (1, 2):
-            go_home()
-            # Возвращаем True чтобы сообщить системе, что мы обработали событие
-            e.prevent_default = True
-        # Если мы на главной — разрешаем стандартное поведение (выход)
-
-    page.on_pop_route = on_pop_route
-
-    # ─── Состояние загрузчика ────────────────────────────────────────────────
-
     status_text = ft.Text("Готов к скачиванию", size=16, weight="bold")
-    status_sub = ft.Text(
-        "Вставьте ссылку и нажмите «Скачать»", size=12, color="#8a8f9c"
-    )
+    status_sub = ft.Text("Вставьте ссылку и нажмите «Скачать»", size=12, color="#8a8f9c")
 
     url_input = ft.TextField(
         hint_text="Введите ссылку",
@@ -194,11 +150,7 @@ def main(page: ft.Page):
         [
             ft.Icon(ft.Icons.FOLDER, size=50, color="#3b82f6"),
             ft.Text("Здесь пока пусто"),
-            ft.Text(
-                "Ваши скачанные видео появятся здесь",
-                size=12,
-                color="#8a8f9c",
-            ),
+            ft.Text("Ваши скачанные видео появятся здесь", size=12, color="#8a8f9c"),
         ],
         alignment=ft.MainAxisAlignment.CENTER,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -211,9 +163,7 @@ def main(page: ft.Page):
     )
 
     def refresh_downloads():
-        downloads_container.content = (
-            downloads_column if downloads_column.controls else empty_block
-        )
+        downloads_container.content = downloads_column if downloads_column.controls else empty_block
         page.update()
 
     def add_download_item(filename: str):
@@ -227,8 +177,6 @@ def main(page: ft.Page):
         for f in files:
             downloads_column.controls.append(build_video_item(f))
         refresh_downloads()
-
-    # ─── Скачивание ─────────────────────────────────────────────────────────
 
     paste_btn = ft.ElevatedButton(
         "Вставить",
@@ -269,22 +217,16 @@ def main(page: ft.Page):
             def run():
                 try:
                     ydl_opts = {
-                        "outtmpl": os.path.join(
-                            download_path, "%(title)s.%(ext)s"
-                        ),
+                        "outtmpl": os.path.join(download_path, "%(title)s.%(ext)s"),
                         "noplaylist": True,
                     }
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                         info = ydl.extract_info(url, download=True)
                         title = info.get("title", "video")
-                    page.call_from_thread(
-                        lambda: update_status("Готово", "Видео скачано")
-                    )
+                    page.call_from_thread(lambda: update_status("Готово", "Видео скачано"))
                     page.call_from_thread(lambda: add_download_item(title))
                 except Exception as e:
-                    page.call_from_thread(
-                        lambda: update_status("Ошибка", str(e))
-                    )
+                    page.call_from_thread(lambda: update_status("Ошибка", str(e)))
                 finally:
                     page.call_from_thread(lambda: set_loading(False))
 
@@ -305,8 +247,6 @@ def main(page: ft.Page):
 
     paste_btn.on_click = paste_clipboard
     download_btn.on_click = lambda e: download()
-
-    # ─── Страница «Скачать» ──────────────────────────────────────────────────
 
     downloads_block = ft.Container(
         content=ft.Column(
@@ -355,17 +295,13 @@ def main(page: ft.Page):
         spacing=15,
     )
 
-    # ─── Страница «История» ──────────────────────────────────────────────────
-
     history_column = ft.Column(spacing=10)
 
     history_empty = ft.Column(
         [
             ft.Icon(ft.Icons.HISTORY, size=50, color="#3b82f6"),
             ft.Text("История пуста"),
-            ft.Text(
-                "Скачанные видео появятся здесь", size=12, color="#8a8f9c"
-            ),
+            ft.Text("Скачанные видео появятся здесь", size=12, color="#8a8f9c"),
         ],
         alignment=ft.MainAxisAlignment.CENTER,
         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -408,7 +344,128 @@ def main(page: ft.Page):
         expand=True,
     )
 
-    # ─── Страница «Настройки» ────────────────────────────────────────────────
+    python_version = sys.version.split(" ")[0]
+    flet_version = ft.version.version
+    ytdlp_version = yt_dlp.version.__version__
+
+    def make_link_row(icon_name, label: str, url: str) -> ft.Container:
+        return ft.Container(
+            content=ft.Row(
+                [
+                    ft.Icon(icon_name, color="#3b82f6", size=20),
+                    ft.Text(label, size=13, color="white", expand=True),
+                    ft.Icon(ft.Icons.OPEN_IN_NEW, color="#8a8f9c", size=16),
+                ],
+                spacing=12,
+            ),
+            padding=ft.padding.symmetric(horizontal=15, vertical=12),
+            bgcolor="#111827",
+            border_radius=10,
+            on_click=lambda e, u=url: page.launch_url(u),
+            ink=True,
+        )
+
+    about_page_content = ft.Column(
+        [
+            ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Row(
+                            [
+                                ft.Container(
+                                    content=ft.Text("DL", size=32, weight="bold", color="white"),
+                                    width=64,
+                                    height=64,
+                                    bgcolor="#3b82f6",
+                                    border_radius=16,
+                                    alignment=ft.alignment.center,
+                                ),
+                                ft.Column(
+                                    [
+                                        ft.Text("DL-TOOL", size=20, weight="bold"),
+                                        ft.Text(f"Версия {APP_VERSION}", size=12, color="#8a8f9c"),
+                                    ],
+                                    spacing=2,
+                                ),
+                            ],
+                            spacing=15,
+                        ),
+                        ft.Divider(color="#1f2937"),
+                        ft.Text(
+                            "DL-TOOL — приложение для скачивания видео с популярных платформ. "
+                            "Поддерживает YouTube, Instagram, TikTok и многие другие сайты.",
+                            size=13,
+                            color="#8a8f9c",
+                        ),
+                    ],
+                    spacing=12,
+                ),
+                padding=15,
+                border_radius=15,
+                bgcolor="#0f172a",
+                border=ft.border.all(1, "#1f2937"),
+            ),
+            ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Text("Версии компонентов", size=14, weight="bold"),
+                        ft.Container(
+                            content=ft.Column(
+                                [
+                                    ft.Row(
+                                        [
+                                            ft.Text("Python", size=13, color="#8a8f9c", expand=True),
+                                            ft.Text(python_version, size=13, color="white"),
+                                        ]
+                                    ),
+                                    ft.Divider(color="#1f2937", height=1),
+                                    ft.Row(
+                                        [
+                                            ft.Text("Flet", size=13, color="#8a8f9c", expand=True),
+                                            ft.Text(flet_version, size=13, color="white"),
+                                        ]
+                                    ),
+                                    ft.Divider(color="#1f2937", height=1),
+                                    ft.Row(
+                                        [
+                                            ft.Text("yt-dlp", size=13, color="#8a8f9c", expand=True),
+                                            ft.Text(ytdlp_version, size=13, color="white"),
+                                        ]
+                                    ),
+                                ],
+                                spacing=8,
+                            ),
+                            padding=12,
+                            bgcolor="#111827",
+                            border_radius=10,
+                        ),
+                    ],
+                    spacing=10,
+                ),
+                padding=15,
+                border_radius=15,
+                bgcolor="#0f172a",
+                border=ft.border.all(1, "#1f2937"),
+            ),
+            ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Text("Разработчик", size=14, weight="bold"),
+                        make_link_row(ft.Icons.SEND, "Telegram — @OFFpolice", "https://t.me/OFFpolice"),
+                        make_link_row(ft.Icons.ALTERNATE_EMAIL, "Twitter/X — @OFFpolice2077", "https://x.com/OFFpolice2077"),
+                        make_link_row(ft.Icons.CAMERA_ALT, "Instagram — @OFFpolice2077", "https://instagram.com/OFFpolice2077"),
+                    ],
+                    spacing=10,
+                ),
+                padding=15,
+                border_radius=15,
+                bgcolor="#0f172a",
+                border=ft.border.all(1, "#1f2937"),
+            ),
+        ],
+        spacing=15,
+        scroll=ft.ScrollMode.AUTO,
+    )
 
     path_field = ft.TextField(
         value=download_path,
@@ -430,9 +487,7 @@ def main(page: ft.Page):
             nonlocal download_path
             ok = await request_all_permissions()
             if not ok:
-                show_snackbar(
-                    "Нет разрешения на запись. Выдайте «Доступ ко всем файлам» в настройках."
-                )
+                show_snackbar("Нет разрешения на запись. Выдайте «Доступ ко всем файлам» в настройках.")
                 return
             try:
                 os.makedirs(new_path, exist_ok=True)
@@ -470,15 +525,10 @@ def main(page: ft.Page):
                                 ft.ElevatedButton(
                                     "Сохранить",
                                     icon=ft.Icons.SAVE,
-                                    style=ft.ButtonStyle(
-                                        bgcolor="#2563eb", color="white"
-                                    ),
+                                    style=ft.ButtonStyle(bgcolor="#2563eb", color="white"),
                                     on_click=save_path,
                                 ),
-                                ft.TextButton(
-                                    "По умолчанию",
-                                    on_click=reset_path,
-                                ),
+                                ft.TextButton("По умолчанию", on_click=reset_path),
                             ],
                             spacing=10,
                         ),
@@ -494,15 +544,7 @@ def main(page: ft.Page):
         spacing=15,
     )
 
-    # ─── show_page ───────────────────────────────────────────────────────────
-
     def show_page(index: int):
-        current_tab[0] = index
-
-        # Кнопка «назад» видна на истории (1) и настройках (2)
-        back_btn.visible = index in (1, 2)
-        # Кнопка настроек скрыта, когда уже на странице настроек
-        # Навбар скрываем на странице настроек
         nav.selected_index = index
 
         if index == 0:
@@ -511,12 +553,12 @@ def main(page: ft.Page):
             refresh_history_page()
             body.content = history_page_content
         elif index == 2:
+            body.content = about_page_content
+        elif index == 3:
             path_field.value = download_path
             body.content = settings_page_content
 
         page.update()
-
-    # ─── Сборка страницы ─────────────────────────────────────────────────────
 
     content = ft.SafeArea(
         content=ft.Container(
@@ -534,8 +576,6 @@ def main(page: ft.Page):
     page.navigation_bar = nav
     show_page(0)
 
-    # ─── Запрос разрешений при старте ───────────────────────────────────────
-
     async def request_permissions_on_start():
         granted = await request_all_permissions()
         if granted:
@@ -546,9 +586,7 @@ def main(page: ft.Page):
             rebuild_history_from_folder()
         else:
             page.snack_bar = ft.SnackBar(
-                ft.Text(
-                    "Выдайте разрешение «Доступ ко всем файлам» в настройках приложения."
-                ),
+                ft.Text("Выдайте разрешение «Доступ ко всем файлам» в настройках приложения."),
                 open=True,
             )
             page.update()
