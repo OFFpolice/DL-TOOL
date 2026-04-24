@@ -1,8 +1,7 @@
 import os
-import sys
+import json
 import yt_dlp
 import threading
-import json
 
 import flet as ft
 import flet_permission_handler as fph
@@ -344,9 +343,6 @@ def main(page: ft.Page):
         expand=True,
     )
 
-    python_version = sys.version.split(" ")[0]
-    flet_version = ft.version.version
-    ytdlp_version = yt_dlp.version.__version__
 
     def make_link_row(icon_name, label: str, url: str) -> ft.Container:
         return ft.Container(
@@ -405,48 +401,7 @@ def main(page: ft.Page):
                 bgcolor="#0f172a",
                 border=ft.border.all(1, "#1f2937"),
             ),
-            ft.Container(
-                content=ft.Column(
-                    [
-                        ft.Text("Версии компонентов", size=14, weight="bold"),
-                        ft.Container(
-                            content=ft.Column(
-                                [
-                                    ft.Row(
-                                        [
-                                            ft.Text("Python", size=13, color="#8a8f9c", expand=True),
-                                            ft.Text(python_version, size=13, color="white"),
-                                        ]
-                                    ),
-                                    ft.Divider(color="#1f2937", height=1),
-                                    ft.Row(
-                                        [
-                                            ft.Text("Flet", size=13, color="#8a8f9c", expand=True),
-                                            ft.Text(flet_version, size=13, color="white"),
-                                        ]
-                                    ),
-                                    ft.Divider(color="#1f2937", height=1),
-                                    ft.Row(
-                                        [
-                                            ft.Text("yt-dlp", size=13, color="#8a8f9c", expand=True),
-                                            ft.Text(ytdlp_version, size=13, color="white"),
-                                        ]
-                                    ),
-                                ],
-                                spacing=8,
-                            ),
-                            padding=12,
-                            bgcolor="#111827",
-                            border_radius=10,
-                        ),
-                    ],
-                    spacing=10,
-                ),
-                padding=15,
-                border_radius=15,
-                bgcolor="#0f172a",
-                border=ft.border.all(1, "#1f2937"),
-            ),
+
             ft.Container(
                 content=ft.Column(
                     [
