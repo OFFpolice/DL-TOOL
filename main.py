@@ -1,12 +1,11 @@
 import os
+import json
 import yt_dlp
 import threading
-import json
 
 import flet as ft
 import flet_permission_handler as fph
 
-APP_VERSION = "1.0.0"
 DEFAULT_DOWNLOAD_PATH = "/storage/emulated/0/Download"
 SETTINGS_FILE = "/storage/emulated/0/Download/.settings.json"
 
@@ -379,7 +378,7 @@ def main(page: ft.Page):
                                 ft.Column(
                                     [
                                         ft.Text("DL-TOOL", size=20, weight="bold"),
-                                        ft.Text(f"Версия {APP_VERSION}", size=12, color="#8a8f9c"),
+                                        ft.Text("by OFFpolice", size=12, color="#8a8f9c"),
                                     ],
                                     spacing=2,
                                 ),
@@ -405,10 +404,10 @@ def main(page: ft.Page):
             ft.Container(
                 content=ft.Column(
                     [
-                        ft.Text("Разработчик", size=14, weight="bold"),
+                        ft.Text("Связь с разработчиком", size=14, weight="bold"),
                         make_link_row(ft.Icons.SEND, "Telegram — @OFFpolice", "https://t.me/OFFpolice"),
-                        make_link_row(ft.Icons.ALTERNATE_EMAIL, "Twitter/X — @OFFpolice2077", "https://x.com/OFFpolice2077"),
-                        make_link_row(ft.Icons.CAMERA_ALT, "Instagram — @OFFpolice2077", "https://instagram.com/OFFpolice2077"),
+                        make_link_row(ft.Icons.SEND, "X (Twitter) — @OFFpolice2077", "https://x.com/OFFpolice2077"),
+                        make_link_row(ft.Icons.SEND, "Instagram — @OFFpolice2077", "https://instagram.com/OFFpolice2077"),
                     ],
                     spacing=10,
                 ),
